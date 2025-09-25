@@ -75,3 +75,6 @@ logs
 # Test files
 test-*.js
 check-*.js
+*-test.js
+test/
+tests/
