@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: false,
-  },
+ 
   env: {
     DB_USER: process.env.DB_USER,
     DB_HOST: process.env.DB_HOST,
