@@ -5,7 +5,8 @@
 
 CREATE TABLE "user" (
   user_id   SERIAL PRIMARY KEY,
-  name      TEXT NOT NULL,
+  first_name character varying(100) null,
+  last_name character varying(100) null,
   email     TEXT NOT NULL UNIQUE,
   phone     TEXT,
   password  TEXT NOT NULL,
@@ -153,10 +154,10 @@ CREATE INDEX idx_course_elective ON course(is_elective);
 -- ========== SAMPLE DATA ====================
 
 -- Insert sample users
-INSERT INTO "user" (name, email, phone, password, role) VALUES
-('Admin User', 'admin@university.edu', '1234567890', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'scheduling_committee'),
-('John Student', 'john@student.edu', '1234567891', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'student'),
-('Jane Faculty', 'jane@faculty.edu', '1234567892', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'faculty');
+INSERT INTO "user" (first_name, last_name, email, phone, password, role) VALUES
+('Admin', 'User', 'admin@university.edu', '1234567890', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'scheduling_committee'),
+('John', 'Student', 'john@student.edu', '1234567891', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'student'),
+('Jane', 'Faculty', 'jane@faculty.edu', '1234567892', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KzKz2C', 'faculty');
 
 -- Insert sample student
 INSERT INTO student (user_id, is_irregular, level) VALUES
