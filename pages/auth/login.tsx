@@ -18,6 +18,19 @@ const LoginPage: React.FC = () => {
     if (error) setError('');
   };
 
+  const getRoleDashboard = (role: string): string => {
+    switch (role) {
+      case "scheduling_committee":
+      case "committee":
+        return "/scheduleCommittee/scheduleCommitteeHomePage";
+      case "faculty":
+        return "/facultyHomePage";
+      case "student":
+      default:
+        return "/studentHomePage";
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -44,7 +57,10 @@ const LoginPage: React.FC = () => {
       if (data.success) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        router.push('/dashboard'); // or wherever you want to redirect
+        
+        // Redirect to role-specific dashboard
+        const dashboardPath = getRoleDashboard(data.user.role);
+        router.push(dashboardPath);
       } else {
         setError(data.message || 'Login failed');
       }
@@ -180,7 +196,7 @@ const LoginPage: React.FC = () => {
                     <p className="text-muted mb-0">
                       Don't have an account?{' '}
                       <a 
-                        href="/signup" 
+                        href="/auth/signup" 
                         className="text-decoration-none fw-bold"
                         style={{ color: '#2F4156' }}
                       >

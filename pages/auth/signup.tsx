@@ -122,7 +122,7 @@ const SignupPage: React.FC = () => {
   const getRoleDashboard = (role: string): string => {
     switch (role) {
       case "committee":
-        return "/scheduleCommitteHomePage";
+        return "/scheduleCommittee/scheduleCommitteHomePage";
       case "faculty":
         return "/facultyHomePage";
       case "student":
@@ -392,7 +392,7 @@ const SignupPage: React.FC = () => {
                     <Form.Group className="mt-3">
                       <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
                         <i className="fas fa-phone me-2"></i>
-                        Phone Number (UAE)
+                        Phone Number 
                       </Form.Label>
                       <Form.Control
                         name="phone"
@@ -479,7 +479,7 @@ const SignupPage: React.FC = () => {
                     <p className="text-muted">
                       Already have an account?{" "}
                       <a 
-                        href="/login" 
+                        href="/auth/login" 
                         className="text-decoration-none fw-bold"
                         style={{ color: '#2F4156' }}
                       >

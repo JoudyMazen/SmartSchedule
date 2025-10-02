@@ -86,7 +86,7 @@ const LandingPage: React.FC = () => {
                       background: '#2F4156',
                       color: '#FFFFFF'
                     }}
-                    onClick={() => router.push('/login')}
+                    onClick={() => router.push('/auth/login')}
                   >
                     <i className="fas fa-arrow-right me-2"></i>
                     Sign In
@@ -127,7 +127,7 @@ const LandingPage: React.FC = () => {
                       background: '#2F4156',
                       color: '#FFFFFF'
                     }}
-                    onClick={() => router.push('/signup')}
+                    onClick={() => router.push('/auth/signup')}
                   >
                     <i className="fas fa-plus me-2"></i>
                     Sign Up
