@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Card, Form, Row, Col, Button, Alert, Table } from 'react-bootstrap';
+import { Container, Card, Form, Row, Col, Button, Alert, Table, Badge } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 
 interface Level {
@@ -11,13 +11,6 @@ interface Course {
   course_code: string;
   course_name: string;
   level: number;
-}
-
-interface Section {
-  section_id: number;
-  section_number: number;
-  activity_type: string;
-  course_code: string;
 }
 
 interface TimeSlot {
@@ -38,22 +31,48 @@ interface ScheduleEntry {
   schedule_id: number;
 }
 
+interface DayTimeSlot {
+  day: string;
+  time_slot: string;
+}
+
+interface SectionConfig {
+  hasLecture: boolean;
+  lectureSection: string;
+  lectureSessions: DayTimeSlot[];
+  
+  hasPractical: boolean;
+  practicalSection: string;
+  practicalSessions: DayTimeSlot[];
+  
+  hasTutorial: boolean;
+  tutorialSection: string;
+  tutorialSessions: DayTimeSlot[];
+}
+
 const AddOtherDepartment: React.FC = () => {
   const [levels, setLevels] = useState<Level[]>([]);
   const [level, setLevel] = useState<number | null>(null);
   const [group, setGroup] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>('');
-  const [selectedSection, setSelectedSection] = useState<number>(0);
-  const [selectedDay, setSelectedDay] = useState<string>('');
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
-  const [alert, setAlert] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: 'success' | 'danger' | 'warning'; message: string } | null>(null);
+  
+  const [config, setConfig] = useState<SectionConfig>({
+    hasLecture: false,
+    lectureSection: '',
+    lectureSessions: [],
+    hasPractical: false,
+    practicalSection: '',
+    practicalSessions: [],
+    hasTutorial: false,
+    tutorialSection: '',
+    tutorialSessions: []
+  });
 
-  // Fetch available levels and groups from database
   useEffect(() => {
     fetch('/api/data/levels')
       .then(res => res.json())
@@ -69,7 +88,6 @@ const AddOtherDepartment: React.FC = () => {
       .catch(err => console.error('Error fetching levels:', err));
   }, []);
 
-  // Fetch available days from database
   useEffect(() => {
     fetch('/api/data/days')
       .then(res => res.json())
@@ -81,7 +99,6 @@ const AddOtherDepartment: React.FC = () => {
       .catch(err => console.error('Error fetching days:', err));
   }, []);
 
-  // Fetch available time slots from database
   useEffect(() => {
     fetch('/api/data/timeSlots')
       .then(res => res.json())
@@ -93,7 +110,6 @@ const AddOtherDepartment: React.FC = () => {
       .catch(err => console.error('Error fetching time slots:', err));
   }, []);
 
-  // Fetch courses for selected level
   useEffect(() => {
     if (!level) return;
 
@@ -101,11 +117,7 @@ const AddOtherDepartment: React.FC = () => {
       .then(res => res.json())
       .then(data => {
         if (data.success && Array.isArray(data.courses)) {
-          // Filter out courses starting with SWE followed by 3 digits
-          const filteredCourses = data.courses.filter((course: Course) => {
-            return !/^SWE\d{3}/.test(course.course_code);
-          });
-          setCourses(filteredCourses);
+          setCourses(data.courses);
         } else {
           setCourses([]);
         }
@@ -115,36 +127,25 @@ const AddOtherDepartment: React.FC = () => {
         setCourses([]);
       });
 
-    // Fetch existing schedule entries
     if (group) {
       fetchScheduleEntries();
     }
   }, [level, group]);
 
-  // Fetch sections when a course is selected
   useEffect(() => {
-    if (!selectedCourse) {
-      setSections([]);
-      setSelectedSection(0);
-      return;
-    }
-
-    fetch(`/api/data/sections?course_code=${selectedCourse}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.sections)) {
-          setSections(data.sections);
-        } else {
-          setSections([]);
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        setSections([]);
-      });
+    setConfig({
+      hasLecture: false,
+      lectureSection: '',
+      lectureSessions: [],
+      hasPractical: false,
+      practicalSection: '',
+      practicalSessions: [],
+      hasTutorial: false,
+      tutorialSection: '',
+      tutorialSessions: []
+    });
   }, [selectedCourse]);
 
-  // Fetch existing schedule entries
   const fetchScheduleEntries = async () => {
     if (!level || !group) return;
 
@@ -158,71 +159,180 @@ const AddOtherDepartment: React.FC = () => {
       console.error(err);
     }
   };
+const handleDeleteCourse = async (courseCode: string, sectionNum: number) => {
+  if (!confirm(`Delete all sessions for ${courseCode}?`)) return;
 
-  // Delete schedule entry
-  const handleDelete = async (scheduleId: number, sectionNum: number, timeSlot: string, day: string) => {
-    if (!confirm('Are you sure you want to delete this schedule entry?')) return;
-
-    try {
-      const response = await fetch(
-        `/api/scheduleCommittee/AddOtherDepartment?schedule_id=${scheduleId}&section_num=${sectionNum}&time_slot=${encodeURIComponent(timeSlot)}&day=${day}`,
-        { method: 'DELETE' }
-      );
-
-      const data = await response.json();
-      if (data.success) {
-        setAlert({ type: 'success', message: 'Schedule entry deleted successfully!' });
-        fetchScheduleEntries();
-      } else {
-        setAlert({ type: 'danger', message: data.error || 'Failed to delete entry.' });
-      }
-    } catch (err) {
-      console.error(err);
-      setAlert({ type: 'danger', message: 'Network error.' });
+  try {
+    const scheduleId = scheduleEntries.find(e => e.course_code === courseCode)?.schedule_id;
+    
+    if (!scheduleId) {
+      setAlert({ type: 'danger', message: 'Schedule ID not found' });
+      return;
     }
+
+    const response = await fetch(
+      `/api/scheduleCommittee/AddOtherDepartment?schedule_id=${scheduleId}&course_code=${courseCode}`,
+      { method: 'DELETE' }
+    );
+
+    const data = await response.json();
+    
+    if (data.success) {
+      setAlert({ type: 'success', message: 'All sessions deleted successfully!' });
+      fetchScheduleEntries();
+    } else {
+      setAlert({ type: 'danger', message: data.error || 'Failed to delete.' });
+    }
+  } catch (err) {
+    console.error(err);
+    setAlert({ type: 'danger', message: 'Error deleting sessions.' });
+  }
+};
+  const addSession = (type: 'lecture' | 'practical' | 'tutorial') => {
+    setConfig(prev => ({
+      ...prev,
+      [`${type}Sessions`]: [...prev[`${type}Sessions` as keyof SectionConfig] as DayTimeSlot[], { day: '', time_slot: '' }]
+    }));
   };
 
-  // Submit manual schedule entry
+  const updateSession = (type: 'lecture' | 'practical' | 'tutorial', index: number, field: 'day' | 'time_slot', value: string) => {
+    setConfig(prev => {
+      const sessions = [...prev[`${type}Sessions` as keyof SectionConfig] as DayTimeSlot[]];
+      sessions[index] = { ...sessions[index], [field]: value };
+      return { ...prev, [`${type}Sessions`]: sessions };
+    });
+  };
+
+  const removeSession = (type: 'lecture' | 'practical' | 'tutorial', index: number) => {
+    setConfig(prev => ({
+      ...prev,
+      [`${type}Sessions`]: (prev[`${type}Sessions` as keyof SectionConfig] as DayTimeSlot[]).filter((_, i) => i !== index)
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate section is exactly 5 digits
-    if (selectedSection.toString().length !== 5) {
-      setAlert({ type: 'danger', message: 'Section number must be exactly 5 digits.' });
+    if (!selectedCourse) {
+      setAlert({ type: 'danger', message: 'Please select a course' });
       return;
     }
 
-    if (!selectedCourse || !selectedSection || !selectedTimeSlot || !selectedDay) {
-      setAlert({ type: 'danger', message: 'Please fill in all required fields.' });
+    const allEntries: any[] = [];
+
+    if (config.hasLecture) {
+      if (!config.lectureSection || config.lectureSection.length !== 5) {
+        setAlert({ type: 'danger', message: 'Lecture section must be exactly 5 digits' });
+        return;
+      }
+      if (config.lectureSessions.length === 0) {
+        setAlert({ type: 'danger', message: 'Please add at least one lecture session' });
+        return;
+      }
+      for (const session of config.lectureSessions) {
+        if (!session.day || !session.time_slot) {
+          setAlert({ type: 'danger', message: 'All lecture sessions must have day and time' });
+          return;
+        }
+        allEntries.push({
+          level,
+          group,
+          section_num: parseInt(config.lectureSection),
+          course_code: selectedCourse,
+          time_slot: session.time_slot,
+          day: session.day,
+          activity_type: 'Lecture'
+        });
+      }
+    }
+
+    if (config.hasPractical) {
+      if (!config.practicalSection || config.practicalSection.length !== 5) {
+        setAlert({ type: 'danger', message: 'Practical section must be exactly 5 digits' });
+        return;
+      }
+      if (config.practicalSessions.length === 0) {
+        setAlert({ type: 'danger', message: 'Please add at least one practical session' });
+        return;
+      }
+      for (const session of config.practicalSessions) {
+        if (!session.day || !session.time_slot) {
+          setAlert({ type: 'danger', message: 'All practical sessions must have day and time' });
+          return;
+        }
+        allEntries.push({
+          level,
+          group,
+          section_num: parseInt(config.practicalSection),
+          course_code: selectedCourse,
+          time_slot: session.time_slot,
+          day: session.day,
+          activity_type: 'Practical'
+        });
+      }
+    }
+
+    if (config.hasTutorial) {
+      if (!config.tutorialSection || config.tutorialSection.length !== 5) {
+        setAlert({ type: 'danger', message: 'Tutorial section must be exactly 5 digits' });
+        return;
+      }
+      if (config.tutorialSessions.length === 0) {
+        setAlert({ type: 'danger', message: 'Please add at least one tutorial session' });
+        return;
+      }
+      for (const session of config.tutorialSessions) {
+        if (!session.day || !session.time_slot) {
+          setAlert({ type: 'danger', message: 'All tutorial sessions must have day and time' });
+          return;
+        }
+        allEntries.push({
+          level,
+          group,
+          section_num: parseInt(config.tutorialSection),
+          course_code: selectedCourse,
+          time_slot: session.time_slot,
+          day: session.day,
+          activity_type: 'Tutorial'
+        });
+      }
+    }
+
+    if (allEntries.length === 0) {
+      setAlert({ type: 'danger', message: 'Please select at least one section type' });
       return;
     }
 
     try {
-      const response = await fetch('/api/scheduleCommittee/AddOtherDepartment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          level,
-          group,
-          section_num: selectedSection,
-          course_code: selectedCourse,
-          time_slot: selectedTimeSlot,
-          day: selectedDay,
-        }),
-      });
+      const promises = allEntries.map(entry =>
+        fetch('/api/scheduleCommittee/AddOtherDepartment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry),
+        })
+      );
 
-      const data = await response.json();
-      if (data.success) {
-        setAlert({ type: 'success', message: 'Schedule entry added successfully!' });
-        // Reset fields
-        setSelectedCourse('');
-        setSelectedSection(0);
-        setSelectedDay('');
-        setSelectedTimeSlot('');
-        // Refresh schedule entries
-        fetchScheduleEntries();
+      const responses = await Promise.all(promises);
+      const results = await Promise.all(responses.map(r => r.json()));
+      const failures = results.filter(r => !r.success);
+
+      if (failures.length > 0) {
+        setAlert({ type: 'danger', message: `Failed: ${failures[0].error}` });
       } else {
-        setAlert({ type: 'danger', message: data.error || 'Failed to add schedule entry.' });
+        setAlert({ type: 'success', message: 'All sessions added successfully!' });
+        setSelectedCourse('');
+        setConfig({
+          hasLecture: false,
+          lectureSection: '',
+          lectureSessions: [],
+          hasPractical: false,
+          practicalSection: '',
+          practicalSessions: [],
+          hasTutorial: false,
+          tutorialSection: '',
+          tutorialSessions: []
+        });
+        fetchScheduleEntries();
       }
     } catch (err) {
       console.error(err);
@@ -233,169 +343,444 @@ const AddOtherDepartment: React.FC = () => {
   const currentLevelData = levels.find(l => l.level_num === level);
   const availableGroups = currentLevelData?.groups || [];
 
+  const groupedEntries = scheduleEntries.reduce((acc, entry) => {
+    const key = `${entry.course_code}-${entry.section_num}`;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(entry);
+    return acc;
+  }, {} as Record<string, ScheduleEntry[]>);
+
   return (
     <Layout>
-      <Container className="py-4">
-        {alert && <Alert variant={alert.type} onClose={() => setAlert(null)} dismissible>{alert.message}</Alert>}
+      <div style={{ background: '#ececec', minHeight: '100vh' }}>
+        <Container className="py-4">
+          <div className="mb-4">
+            <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
+              Add Other Department Courses
+            </h2>
+            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+              Schedule external department courses
+            </p>
+          </div>
 
-        <Card className="mb-4">
-          <Card.Header>Add Other Department Schedule</Card.Header>
-          <Card.Body>
-            <Form onSubmit={handleSubmit}>
-              {/* Level & Group Selection */}
-              <Row className="mb-3">
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label>Level <span className="text-danger">*</span></Form.Label>
-                    <Form.Select
-                      value={level || ''}
-                      onChange={e => {
-                        const newLevel = parseInt(e.target.value);
-                        setLevel(newLevel);
-                        const levelData = levels.find(l => l.level_num === newLevel);
-                        if (levelData && levelData.groups.length > 0) {
-                          setGroup(levelData.groups[0]);
-                        }
-                      }}
-                    >
-                      <option value="">Select Level</option>
-                      {levels.map(l => (
-                        <option key={l.level_num} value={l.level_num}>Level {l.level_num}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label>Group <span className="text-danger">*</span></Form.Label>
-                    <Form.Select
-                      value={group || ''}
-                      onChange={e => setGroup(parseInt(e.target.value))}
-                      disabled={!level}
-                    >
-                      <option value="">Select Group</option>
-                      {availableGroups.map(g => (
-                        <option key={g} value={g}>Group {g}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-              </Row>
+          {alert && (
+            <Alert variant={alert.type} onClose={() => setAlert(null)} dismissible className="border-0 shadow-sm">
+              {alert.message}
+            </Alert>
+          )}
 
-              {/* Course Selection */}
-              <Row className="mb-3">
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label>Course <span className="text-danger">*</span></Form.Label>
-                    <Form.Select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)}>
-                      <option value="">Select Course</option>
-                      {courses.map(c => (
-                        <option key={c.course_code} value={c.course_code}>
-                          {c.course_code} - {c.course_name}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    {courses.length === 0 && level && (
-                      <Form.Text className="text-muted">
-                        No courses available for Level {level}
-                      </Form.Text>
-                    )}
-                  </Form.Group>
-                </Col>
-              </Row>
+          <Card className="mb-4 shadow-sm border-0">
+            <Card.Header style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' }} className="text-white py-3">
+              <h5 className="mb-0 fw-semibold">Course Configuration</h5>
+            </Card.Header>
+            <Card.Body className="p-4" style={{ background: 'white' }}>
+              <Form onSubmit={handleSubmit}>
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Level *</Form.Label>
+                      <Form.Select
+                        value={level || ''}
+                        onChange={e => {
+                          const newLevel = parseInt(e.target.value);
+                          setLevel(newLevel);
+                          const levelData = levels.find(l => l.level_num === newLevel);
+                          if (levelData && levelData.groups.length > 0) {
+                            setGroup(levelData.groups[0]);
+                          }
+                        }}
+                        className="border-2"
+                        style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                      >
+                        <option value="">Select Level</option>
+                        {levels.map(l => (
+                          <option key={l.level_num} value={l.level_num}>Level {l.level_num}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Group *</Form.Label>
+                      <Form.Select
+                        value={group || ''}
+                        onChange={e => setGroup(parseInt(e.target.value))}
+                        disabled={!level}
+                        className="border-2"
+                        style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                      >
+                        <option value="">Select Group</option>
+                        {availableGroups.map(g => (
+                          <option key={g} value={g}>Group {g}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
 
-              {/* Section Input - 5 digits only */}
-              <Row className="mb-3">
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label>Section Number <span className="text-danger">*</span></Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder="Enter 5-digit section number (e.g., 10001)"
-                      value={selectedSection || ''}
-                      onChange={e => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        if (value.length <= 5) {
-                          setSelectedSection(parseInt(value) || 0);
-                        }
-                      }}
-                      maxLength={5}
-                      required
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
+                <Form.Group className="mb-4">
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Course *</Form.Label>
+                  <Form.Select 
+                    value={selectedCourse} 
+                    onChange={e => setSelectedCourse(e.target.value)}
+                    className="border-2"
+                    style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                  >
+                    <option value="">Select Course</option>
+                    {courses.map(c => (
+                      <option key={c.course_code} value={c.course_code}>
+                        {c.course_code} - {c.course_name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
 
-              {/* Day & Time Slot */}
-              <Row className="mb-3">
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label>Day <span className="text-danger">*</span></Form.Label>
-                    <Form.Select value={selectedDay} onChange={e => setSelectedDay(e.target.value)}>
-                      <option value="">Select Day</option>
-                      {days.map(d => (
-                        <option key={d.day} value={d.day}>{d.day}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label>Time Slot <span className="text-danger">*</span></Form.Label>
-                    <Form.Select value={selectedTimeSlot} onChange={e => setSelectedTimeSlot(e.target.value)}>
-                      <option value="">Select Time Slot</option>
-                      {timeSlots.map(t => (
-                        <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-              </Row>
+                {selectedCourse && (
+                  <div className="border rounded p-4 mb-4" style={{ background: '#ececec', borderColor: '#87CEEB' }}>
+                    <h6 className="mb-4 fw-semibold" style={{ color: '#1e3a5f' }}>Configure Section Types</h6>
 
-              <Button type="submit" variant="primary">Add to Schedule</Button>
-            </Form>
-          </Card.Body>
-        </Card>
+                    {/* Lecture */}
+                    <Card className="mb-3 border-0 shadow-sm">
+                      <Card.Body style={{ background: 'white' }}>
+                        <Form.Check
+                          type="checkbox"
+                          label={<strong style={{ color: '#1e3a5f' }}>Lecture</strong>}
+                          checked={config.hasLecture}
+                          onChange={e => setConfig({...config, hasLecture: e.target.checked})}
+                          className="mb-3"
+                        />
 
-        {/* Display Existing Schedule Entries */}
-        {scheduleEntries.length > 0 && level && group && (
-          <Card>
-            <Card.Header>Current Schedule - Level {level}, Group {group}</Card.Header>
-            <Card.Body>
-              <Table striped bordered hover responsive>
-                <thead>
-                  <tr>
-                    <th>Course</th>
-                    <th>Section</th>
-                    <th>Day</th>
-                    <th>Time</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scheduleEntries.map((entry, idx) => (
-                    <tr key={idx}>
-                      <td>{entry.course_code} - {entry.course_name}</td>
-                      <td>Section {entry.section_num} ({entry.activity_type})</td>
-                      <td>{entry.day}</td>
-                      <td>{entry.time_slot}</td>
-                      <td>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDelete(entry.schedule_id, entry.section_num, entry.time_slot, entry.day)}
-                        >
-                          Delete
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+                        {config.hasLecture && (
+                          <>
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold" style={{ color: '#1e3a5f' }}>Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                type="text"
+                                placeholder="12344"
+                                value={config.lectureSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) {
+                                    setConfig({...config, lectureSection: value});
+                                  }
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: '#87CEEB' }}
+                              />
+                            </Form.Group>
+
+                            <div className="mb-2">
+                              <label className="small fw-bold d-block mb-2" style={{ color: '#1e3a5f' }}>Sessions</label>
+                              {config.lectureSessions.map((session, idx) => (
+                                <Row key={idx} className="mb-2 g-2">
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.day}
+                                      onChange={e => updateSession('lecture', idx, 'day', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Day</option>
+                                      {days.map(d => (
+                                        <option key={d.day} value={d.day}>{d.day}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.time_slot}
+                                      onChange={e => updateSession('lecture', idx, 'time_slot', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Time</option>
+                                      {timeSlots.map(t => (
+                                        <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={2}>
+                                    <Button
+                                      size="sm"
+                                      className="border-0"
+                                      style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                                      onClick={() => removeSession('lecture', idx)}
+                                    >
+                                      ×
+                                    </Button>
+                                  </Col>
+                                </Row>
+                              ))}
+                              <Button
+                                size="sm"
+                                className="border-0"
+                                style={{ background: '#87CEEB', color: '#1e3a5f' }}
+                                onClick={() => addSession('lecture')}
+                              >
+                                + Add Session
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </Card.Body>
+                    </Card>
+
+                    {/* Practical */}
+                    <Card className="mb-3 border-0 shadow-sm">
+                      <Card.Body style={{ background: 'white' }}>
+                        <Form.Check
+                          type="checkbox"
+                          label={<strong style={{ color: '#1e3a5f' }}>Lab</strong>}
+                          checked={config.hasPractical}
+                          onChange={e => setConfig({...config, hasPractical: e.target.checked})}
+                          className="mb-3"
+                        />
+
+                        {config.hasPractical && (
+                          <>
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold" style={{ color: '#1e3a5f' }}>Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                type="text"
+                                placeholder="12345"
+                                value={config.practicalSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) {
+                                    setConfig({...config, practicalSection: value});
+                                  }
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: '#87CEEB' }}
+                              />
+                            </Form.Group>
+
+                            <div className="mb-2">
+                              <label className="small fw-bold d-block mb-2" style={{ color: '#1e3a5f' }}>Sessions</label>
+                              {config.practicalSessions.map((session, idx) => (
+                                <Row key={idx} className="mb-2 g-2">
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.day}
+                                      onChange={e => updateSession('practical', idx, 'day', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Day</option>
+                                      {days.map(d => (
+                                        <option key={d.day} value={d.day}>{d.day}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.time_slot}
+                                      onChange={e => updateSession('practical', idx, 'time_slot', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Time</option>
+                                      {timeSlots.map(t => (
+                                        <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={2}>
+                                    <Button
+                                      size="sm"
+                                      className="border-0"
+                                      style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                                      onClick={() => removeSession('practical', idx)}
+                                    >
+                                      ×
+                                    </Button>
+                                  </Col>
+                                </Row>
+                              ))}
+                              <Button
+                                size="sm"
+                                className="border-0"
+                                style={{ background: '#87CEEB', color: '#1e3a5f' }}
+                                onClick={() => addSession('practical')}
+                              >
+                                + Add Session
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </Card.Body>
+                    </Card>
+
+                    {/* Tutorial */}
+                    <Card className="mb-3 border-0 shadow-sm">
+                      <Card.Body style={{ background: 'white' }}>
+                        <Form.Check
+                          type="checkbox"
+                          label={<strong style={{ color: '#1e3a5f' }}>Tutorial</strong>}
+                          checked={config.hasTutorial}
+                          onChange={e => setConfig({...config, hasTutorial: e.target.checked})}
+                          className="mb-3"
+                        />
+
+                        {config.hasTutorial && (
+                          <>
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold" style={{ color: '#1e3a5f' }}>Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                type="text"
+                                placeholder="12346"
+                                value={config.tutorialSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) {
+                                    setConfig({...config, tutorialSection: value});
+                                  }
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: '#87CEEB' }}
+                              />
+                            </Form.Group>
+
+                            <div className="mb-2">
+                              <label className="small fw-bold d-block mb-2" style={{ color: '#1e3a5f' }}>Sessions</label>
+                              {config.tutorialSessions.map((session, idx) => (
+                                <Row key={idx} className="mb-2 g-2">
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.day}
+                                      onChange={e => updateSession('tutorial', idx, 'day', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Day</option>
+                                      {days.map(d => (
+                                        <option key={d.day} value={d.day}>{d.day}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.time_slot}
+                                      onChange={e => updateSession('tutorial', idx, 'time_slot', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Time</option>
+                                      {timeSlots.map(t => (
+                                        <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={2}>
+                                    <Button
+                                      size="sm"
+                                      className="border-0"
+                                      style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                                      onClick={() => removeSession('tutorial', idx)}
+                                    >
+                                      ×
+                                    </Button>
+                                  </Col>
+                                </Row>
+                              ))}
+                              <Button
+                                size="sm"
+                                className="border-0"
+                                style={{ background: '#87CEEB', color: '#1e3a5f' }}
+                                onClick={() => addSession('tutorial')}
+                              >
+                                + Add Session
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  disabled={!selectedCourse}
+                  size="lg"
+                  className="border-0 shadow-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                    color: 'white'
+                  }}
+                >
+                  Add All Sessions to Schedule
+                </Button>
+              </Form>
             </Card.Body>
           </Card>
-        )}
-      </Container>
+
+          {Object.keys(groupedEntries).length > 0 && level && group && (
+            <Card className="shadow-sm border-0">
+              <Card.Header style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' }} className="text-white py-3">
+                <h5 className="mb-0 fw-semibold">Current Schedule - Level {level}, Group {group}</h5>
+              </Card.Header>
+              <Card.Body className="p-0">
+                {Object.entries(groupedEntries).map(([key, entries]) => {
+                  const [courseCode, sectionNum] = key.split('-');
+                  return (
+                    <div key={key} className="border-bottom p-3">
+                      <Row className="align-items-center mb-2">
+                        <Col>
+                          <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
+                            {courseCode} - Section {sectionNum}
+                          </h6>
+                        </Col>
+                        <Col xs="auto">
+                          <Button
+                            size="sm"
+                            className="border-0"
+                            style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                            onClick={() => handleDeleteCourse(courseCode, parseInt(sectionNum))}
+                          >
+                            Delete All
+                          </Button>
+                        </Col>
+                      </Row>
+                      <Table size="sm" className="mb-0">
+                        <thead style={{ background: '#87CEEB' }}>
+                          <tr>
+                            <th style={{ color: '#1e3a5f', border: 'none' }}>Type</th>
+                            <th style={{ color: '#1e3a5f', border: 'none' }}>Day</th>
+                            <th style={{ color: '#1e3a5f', border: 'none' }}>Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.map((entry, idx) => (
+                            <tr key={idx}>
+                              <td style={{ border: 'none', borderTop: '1px solid #dee2e6' }}>
+                                <span style={{
+                                  background: '#e6f4ff',
+                                  color: '#1e3a5f',
+                                  padding: '4px 12px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.85rem',
+                                  fontWeight: '500'
+                                }}>
+                                  {entry.activity_type || 'N/A'}
+                                </span>
+                              </td>
+                              <td style={{ border: 'none', borderTop: '1px solid #dee2e6', color: '#5a7a99' }}>{entry.day}</td>
+                              <td style={{ border: 'none', borderTop: '1px solid #dee2e6', color: '#5a7a99' }}>{entry.time_slot}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  );
+                })}
+              </Card.Body>
+            </Card>
+          )}
+        </Container>
+      </div>
     </Layout>
   );
 };

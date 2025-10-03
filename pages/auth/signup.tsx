@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/router";
 import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from "react-bootstrap";
 
-// Fix for FormControl type issue
 type FormControlElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 interface FormData {
@@ -36,8 +35,8 @@ const SignupPage: React.FC = () => {
   const [passwordStrength, setPasswordStrength] = useState(0);
 
   const validatePhone = (phone: string): boolean => {
-    const cleaned = phone.replace(/\D/g, ''); // remove spaces/dashes
-    const phoneRegex = /^05[0-9]\d{7}$/; // 050-059 + 7 digits
+    const cleaned = phone.replace(/\D/g, '');
+    const phoneRegex = /^05[0-9]\d{7}$/;
     return phoneRegex.test(cleaned);
   };
 
@@ -56,22 +55,18 @@ const SignupPage: React.FC = () => {
     return strength;
   };
 
-  // Fixed onChange handler with proper type
   const handleInputChange = (e: React.ChangeEvent<FormControlElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }));
     }
 
-    // Check password strength in real-time
     if (name === "password") {
       setPasswordStrength(checkPasswordStrength(value));
     }
 
-    // Format phone number as user types
     if (name === "phone") {
       const cleaned = value.replace(/\D/g, '');
       if (cleaned.length <= 3) {
@@ -87,7 +82,6 @@ const SignupPage: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: Errors = {};
 
-    // Required field validation
     if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
     
@@ -122,7 +116,7 @@ const SignupPage: React.FC = () => {
   const getRoleDashboard = (role: string): string => {
     switch (role) {
       case "committee":
-        return "/scheduleCommittee/scheduleCommitteHomePage";
+        return "/scheduleCommittee/scheduleCommitteeHomePage";
       case "faculty":
         return "/facultyHomePage";
       case "student":
@@ -151,7 +145,7 @@ const SignupPage: React.FC = () => {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           email: formData.email.toLowerCase().trim(),
-          phone: formData.phone.replace(/\D/g, ''), // remove formatting
+          phone: formData.phone.replace(/\D/g, ''),
           password: formData.password,
           role: formData.role === "committee" ? "scheduling_committee" : formData.role,
         }),
@@ -164,11 +158,9 @@ const SignupPage: React.FC = () => {
       }
 
       if (data.success) {
-        // Store authentication data
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
         
-        // Redirect to role-specific dashboard
         const dashboardPath = getRoleDashboard(formData.role);
         router.push(dashboardPath);
       } else {
@@ -221,26 +213,26 @@ const SignupPage: React.FC = () => {
     onSelect: (value: string) => void;
   }> = ({ value, icon, label, description, selected, onSelect }) => (
     <div 
-      className={`card cursor-pointer h-100 ${selected ? 'border-3' : 'border-light'}`}
+      className="card cursor-pointer h-100 border-2 shadow-sm"
       onClick={() => onSelect(value)}
       style={{ 
         transition: 'all 0.3s ease',
-        borderColor: selected ? '#2F4156' : undefined,
-        backgroundColor: selected ? '#F5EFEB' : 'white',
+        borderColor: selected ? '#1e3a5f' : '#dee2e6',
+        backgroundColor: selected ? '#e6f4ff' : 'white',
         cursor: 'pointer'
       }}
     >
-      <div className="card-body text-center">
-        <div className="mb-3" style={{ color: selected ? '#2F4156' : '#6c757d' }}>
+      <div className="card-body text-center p-3">
+        <div className="mb-2" style={{ color: selected ? '#1e3a5f' : '#6c757d' }}>
           <i className={icon} style={{ fontSize: '2rem' }}></i>
         </div>
-        <h6 className="card-title" style={{ color: selected ? '#2F4156' : '#212529' }}>
+        <h6 className="card-title mb-2" style={{ color: selected ? '#1e3a5f' : '#212529', fontSize: '0.9rem' }}>
           {label}
         </h6>
-        <p className="card-text small text-muted">{description}</p>
+        <p className="card-text small text-muted mb-2" style={{ fontSize: '0.75rem' }}>{description}</p>
         {selected && (
-          <div style={{ color: '#2F4156' }}>
-            <i className="fas fa-check"></i>
+          <div style={{ color: '#1e3a5f' }}>
+            <i className="fas fa-check-circle"></i>
           </div>
         )}
       </div>
@@ -249,7 +241,6 @@ const SignupPage: React.FC = () => {
 
   return (
     <>
-      {/* Include Font Awesome for icons */}
       <link 
         rel="stylesheet" 
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
@@ -258,7 +249,7 @@ const SignupPage: React.FC = () => {
       <div 
         className="min-vh-100 d-flex align-items-center justify-content-center py-4"
         style={{ 
-          background: 'linear-gradient(135deg, #2F4156 0%, #567C8D 100%)'
+          background: 'linear-gradient(135deg, #1e3a5f 0%, #87CEEB 100%)'
         }}
       >
         <Container>
@@ -268,55 +259,54 @@ const SignupPage: React.FC = () => {
                 <Card.Header 
                   className="text-white text-center py-4 border-0"
                   style={{ 
-                    background: '#2F4156',
+                    background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
                     borderRadius: '20px 20px 0 0'
                   }}
                 >
-                  <h2 className="mb-0 fw-bold">Create Your Account</h2>
+                  <h2 className="mb-1 fw-bold">Create Your Account</h2>
                   <p className="mb-0 opacity-75">Join Smart Schedule System</p>
                 </Card.Header>
                 
-                <Card.Body className="p-4 p-md-5" style={{ background: '#F5EFEB' }}>
+                <Card.Body className="p-4 p-md-5" style={{ background: 'white' }}>
                   {errors.general && (
-                    <Alert variant="danger" className="d-flex align-items-center">
+                    <Alert variant="danger" className="d-flex align-items-center border-0">
                       <i className="fas fa-times me-2"></i>
                       {errors.general}
                     </Alert>
                   )}
 
                   <Form onSubmit={handleSubmit}>
-                    {/* Role Selection */}
                     <Form.Group className="mb-4">
-                      <Form.Label className="fw-bold mb-3" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
                         Select Your Role *
                       </Form.Label>
-                      <Row className="g-3">
-                        <Col md={4}>
+                      <Row className="g-2">
+                        <Col xs={4}>
                           <RoleOption
                             value="student"
                             icon="fas fa-graduation-cap"
                             label="Student"
-                            description="Access courses and schedules"
+                            description="Access schedules"
                             selected={formData.role === "student"}
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
                         </Col>
-                        <Col md={4}>
+                        <Col xs={4}>
                           <RoleOption
                             value="faculty"
                             icon="fas fa-chalkboard-teacher"
                             label="Faculty"
-                            description="Manage courses and schedules"
+                            description="Manage courses"
                             selected={formData.role === "faculty"}
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
                         </Col>
-                        <Col md={4}>
+                        <Col xs={4}>
                           <RoleOption
                             value="committee"
                             icon="fas fa-cog"
                             label="Committee"
-                            description="Administer system settings"
+                            description="Administer system"
                             selected={formData.role === "committee"}
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
@@ -324,11 +314,10 @@ const SignupPage: React.FC = () => {
                       </Row>
                     </Form.Group>
 
-                    {/* Name Fields */}
                     <Row className="g-3">
                       <Col md={6}>
                         <Form.Group>
-                          <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                          <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                             <i className="fas fa-user me-2"></i>
                             First Name *
                           </Form.Label>
@@ -339,7 +328,8 @@ const SignupPage: React.FC = () => {
                             onChange={handleInputChange}
                             isInvalid={!!errors.firstName}
                             placeholder="Enter your first name"
-                            className="py-3"
+                            className="py-2 border-2"
+                            style={{ borderColor: errors.firstName ? undefined : '#87CEEB' }}
                           />
                           <Form.Control.Feedback type="invalid">
                             {errors.firstName}
@@ -348,7 +338,7 @@ const SignupPage: React.FC = () => {
                       </Col>
                       <Col md={6}>
                         <Form.Group>
-                          <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                          <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                             <i className="fas fa-user me-2"></i>
                             Last Name *
                           </Form.Label>
@@ -359,7 +349,8 @@ const SignupPage: React.FC = () => {
                             onChange={handleInputChange}
                             isInvalid={!!errors.lastName}
                             placeholder="Enter your last name"
-                            className="py-3"
+                            className="py-2 border-2"
+                            style={{ borderColor: errors.lastName ? undefined : '#87CEEB' }}
                           />
                           <Form.Control.Feedback type="invalid">
                             {errors.lastName}
@@ -368,9 +359,8 @@ const SignupPage: React.FC = () => {
                       </Col>
                     </Row>
 
-                    {/* Email */}
                     <Form.Group className="mt-3">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-envelope me-2"></i>
                         Email Address *
                       </Form.Label>
@@ -381,16 +371,16 @@ const SignupPage: React.FC = () => {
                         onChange={handleInputChange}
                         isInvalid={!!errors.email}
                         placeholder="your.email@university.edu"
-                        className="py-3"
+                        className="py-2 border-2"
+                        style={{ borderColor: errors.email ? undefined : '#87CEEB' }}
                       />
                       <Form.Control.Feedback type="invalid">
                         {errors.email}
                       </Form.Control.Feedback>
                     </Form.Group>
 
-                    {/* Phone */}
                     <Form.Group className="mt-3">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-phone me-2"></i>
                         Phone Number 
                       </Form.Label>
@@ -401,7 +391,8 @@ const SignupPage: React.FC = () => {
                         onChange={handleInputChange}
                         isInvalid={!!errors.phone}
                         placeholder="050-999-1234"
-                        className="py-3"
+                        className="py-2 border-2"
+                        style={{ borderColor: errors.phone ? undefined : '#87CEEB' }}
                       />
                       <Form.Text className="text-muted">
                         Format: 0509991234 or 050-999-1234
@@ -411,9 +402,8 @@ const SignupPage: React.FC = () => {
                       </Form.Control.Feedback>
                     </Form.Group>
 
-                    {/* Password */}
                     <Form.Group className="mt-3">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-lock me-2"></i>
                         Password *
                       </Form.Label>
@@ -424,7 +414,8 @@ const SignupPage: React.FC = () => {
                         onChange={handleInputChange}
                         isInvalid={!!errors.password}
                         placeholder="Create a strong password"
-                        className="py-3"
+                        className="py-2 border-2"
+                        style={{ borderColor: errors.password ? undefined : '#87CEEB' }}
                       />
                       {formData.password && <PasswordStrengthIndicator />}
                       <Form.Control.Feedback type="invalid">
@@ -432,9 +423,8 @@ const SignupPage: React.FC = () => {
                       </Form.Control.Feedback>
                     </Form.Group>
 
-                    {/* Confirm Password */}
                     <Form.Group className="mt-3">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-lock me-2"></i>
                         Confirm Password *
                       </Form.Label>
@@ -445,21 +435,21 @@ const SignupPage: React.FC = () => {
                         onChange={handleInputChange}
                         isInvalid={!!errors.confirmPassword}
                         placeholder="Confirm your password"
-                        className="py-3"
+                        className="py-2 border-2"
+                        style={{ borderColor: errors.confirmPassword ? undefined : '#87CEEB' }}
                       />
                       <Form.Control.Feedback type="invalid">
                         {errors.confirmPassword}
                       </Form.Control.Feedback>
                     </Form.Group>
 
-                    {/* Submit Button */}
                     <Button
                       type="submit"
-                      className="w-100 py-3 mt-4 fw-bold border-0"
+                      className="w-100 py-3 mt-4 fw-bold border-0 shadow-sm"
                       disabled={isLoading}
                       size="lg"
                       style={{ 
-                        background: '#2F4156',
+                        background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
                         borderRadius: '12px'
                       }}
                     >
@@ -474,14 +464,13 @@ const SignupPage: React.FC = () => {
                     </Button>
                   </Form>
 
-                  {/* Login Link */}
                   <div className="text-center mt-4">
                     <p className="text-muted">
                       Already have an account?{" "}
                       <a 
                         href="/auth/login" 
                         className="text-decoration-none fw-bold"
-                        style={{ color: '#2F4156' }}
+                        style={{ color: '#1e3a5f' }}
                       >
                         Sign in here
                       </a>

@@ -1,17 +1,7 @@
 // pages/api/scheduleCommittee/scheduleCommitteeRules.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Pool } from 'pg';
+import pool from '../../../lib/database'; // Use shared pool
 
-// Database connection
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || '5432'),
-});
-
-// Simplified interface matching the database schema
 interface SchedulingRule {
   rule_id: number;
   rule_name: string;
@@ -78,7 +68,6 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>
   try {
     const { rule_name, rule_description, rule_type, priority, is_active }: CreateRuleRequest = req.body;
     
-    // Validate required fields
     if (!rule_name || !rule_description || !rule_type) {
       return res.status(400).json({
         success: false,
@@ -86,7 +75,6 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>
       });
     }
     
-    // Validate rule_type
     const validTypes = ['time_block', 'constraint', 'preference', 'distribution'];
     if (!validTypes.includes(rule_type)) {
       return res.status(400).json({
@@ -95,7 +83,6 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>
       });
     }
     
-    // Validate priority
     const rulePriority = priority || 3;
     if (rulePriority < 1 || rulePriority > 5) {
       return res.status(400).json({
@@ -146,7 +133,6 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
       });
     }
     
-    // Check if rule exists
     const checkQuery = 'SELECT rule_id FROM scheduling_rule WHERE rule_id = $1';
     const checkResult = await pool.query(checkQuery, [id]);
     
@@ -157,7 +143,6 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
       });
     }
     
-    // Validate rule_type if provided
     if (rule_type) {
       const validTypes = ['time_block', 'constraint', 'preference', 'distribution'];
       if (!validTypes.includes(rule_type)) {
@@ -168,7 +153,6 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
       }
     }
     
-    // Validate priority if provided
     if (priority !== undefined && (priority < 1 || priority > 5)) {
       return res.status(400).json({
         success: false,
@@ -210,7 +194,6 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
     });
   }
 }
-
 // DELETE - Delete rule
 async function handleDelete(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   try {
@@ -247,11 +230,9 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse<ApiRespons
   }
 }
 
-// Main handler function
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   const { method } = req;
 
-  // Handle different HTTP methods
   switch (method) {
     case 'GET':
       return handleGet(req, res);

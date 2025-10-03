@@ -3,8 +3,6 @@ import { Container, Row, Col, Card, Button, Form, Table, Badge, Modal, Alert, Na
 import Layout from '../../components/Layout';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
-
-
 interface SchedulingRule {
   rule_id: number;
   rule_name: string;
@@ -41,10 +39,10 @@ const RuleManagementPage: React.FC = () => {
   });
 
   const ruleTypes = [
-    { value: 'time_block', label: 'Time Block', variant: 'secondary' },
-    { value: 'constraint', label: 'Constraint',  variant: 'primary' },
-    { value: 'preference', label: 'Preference', variant: 'secondary' },
-    { value: 'distribution', label: 'Distribution',  variant: 'primary' }
+    { value: 'time_block', label: 'Time Block' },
+    { value: 'constraint', label: 'Constraint' },
+    { value: 'preference', label: 'Preference' },
+    { value: 'distribution', label: 'Distribution' }
   ];
 
   useEffect(() => {
@@ -153,269 +151,350 @@ const RuleManagementPage: React.FC = () => {
     return ruleTypes.find(rt => rt.value === type) || ruleTypes[0];
   };
 
-  const getPriorityVariant = (priority: number) => {
-    if (priority <= 2) return 'primary';
-    if (priority <= 3) return 'secondary';
-    return 'light';
-  };
-
   return (
     <Layout>
-      <style>{`
-        :root {
-          --bs-primary: #2F4156;
-          --bs-primary-rgb: 47, 65, 86;
-          --bs-secondary: #567C8D;
-          --bs-secondary-rgb: 86, 124, 141;
-          --bs-light: #C8D9E6;
-          --bs-light-rgb: 200, 217, 230;
-          --bs-success: #567C8D;
-          --bs-success-rgb: 86, 124, 141;
-        }
-        .bg-beige {
-          background-color: #F5EFEB !important;
-        }
-        .text-navy {
-          color: #2F4156 !important;
-        }
-        .text-teal {
-          color: #567C8D !important;
-        }
-      `}</style>
-      
-      <Container className="py-4">
-        {alert && (
-          <Alert variant={alert.type} onClose={() => setAlert(null)} dismissible className="mb-4">
-            {alert.message}
-          </Alert>
-        )}
+      <div style={{ background: '#ececec', minHeight: '100vh' }}>
+        <Container className="py-4">
+          <div className="mb-4">
+            <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
+              Rules Management
+            </h2>
+            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+              Define and manage scheduling rules for SmartSchedule
+            </p>
+          </div>
 
-        {/* Header */}
-        <Card className="mb-4">
-          <Card.Header className="bg-primary text-white">
-            <Row className="align-items-center">
-              <Col>
-                <h4 className="mb-0">
-                  <i className="bi bi-gear me-2"></i>
-                  Scheduling Rules Management
-                </h4>
-                <small>Define and manage scheduling rules for SmartSchedule</small>
-              </Col>
-              <Col xs="auto">
-                <Button 
-                  variant="light"
-                  onClick={() => {
-                    setModalType('add');
-                    resetForm();
-                    setShowModal(true);
-                  }}
-                >
-                  <i className="bi bi-plus-lg me-1"></i>
-                  Add Rule
-                </Button>
-              </Col>
-            </Row>
-          </Card.Header>
-        </Card>
+          {alert && (
+            <Alert variant={alert.type} onClose={() => setAlert(null)} dismissible className="mb-4 border-0 shadow-sm">
+              {alert.message}
+            </Alert>
+          )}
 
-        {/* Tabs */}
-        <Card className="mb-4">
-          <Card.Body className="p-0">
-            <Nav variant="tabs">
-              <Nav.Item>
-                <Nav.Link 
-                  active={activeTab === 'all'}
-                  onClick={() => setActiveTab('all')}
-                >
-                  All Rules ({rules.length})
-                </Nav.Link>
-              </Nav.Item>
-              {ruleTypes.map(type => {
-                const count = rules.filter(r => r.rule_type === type.value).length;
-                return (
-                  <Nav.Item key={type.value}>
-                    <Nav.Link 
-                      active={activeTab === type.value}
-                      onClick={() => setActiveTab(type.value)}
-                    >
-                      {type.label} ({count})
-                    </Nav.Link>
-                  </Nav.Item>
-                );
-              })}
-            </Nav>
-          </Card.Body>
-        </Card>
+          {/* Actions Card */}
+          <Row className="mb-4 g-3">
+            <Col lg={12}>
+              <Card className="border-0 shadow-sm" style={{ background: 'white' }}>
+                <Card.Body>
+                  <h6 className="mb-3 fw-semibold" style={{ color: '#1e3a5f' }}>Actions</h6>
+                  <Button 
+                    className="border-0 shadow-sm"
+                    style={{
+                      background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                      color: 'white',
+                      padding: '8px 20px',
+                      fontSize: '0.9rem'
+                    }}
+                    onClick={() => {
+                      setModalType('add');
+                      resetForm();
+                      setShowModal(true);
+                    }}
+                  >
+                    <i className="bi bi-plus-lg me-2"></i>
+                    Add New Rule
+                  </Button>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
 
-        {/* Rules Table */}
-        <Card>
-          <Card.Body className="p-0">
-            {isLoading ? (
-              <div className="text-center p-5">
-                <Spinner animation="border" variant="primary" />
-                <p className="mt-2">Loading rules...</p>
-              </div>
-            ) : (
-              <Table responsive hover className="mb-0">
-                <thead className="bg-beige">
-                  <tr>
-                    <th className="text-navy">Rule Name</th>
-                    <th className="text-navy">Type</th>
-                    <th className="text-navy">Priority</th>
-                    <th className="text-navy">Status</th>
-                    <th className="text-navy">Created</th>
-                    <th className="text-navy">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {getFilteredRules().map(rule => {
-                    const typeInfo = getRuleTypeInfo(rule.rule_type);
-                    return (
-                      <tr key={rule.rule_id}>
-                        <td className="fw-bold text-navy">{rule.rule_name}</td>
-                        <td>
-                          <Badge bg={typeInfo.variant}>
-                            {typeInfo.label}
-                          </Badge>
-                        </td>
-                        <td>
-                          <Badge bg={getPriorityVariant(rule.priority)}>
-                            {rule.priority}
-                          </Badge>
-                        </td>
-                        <td>
-                          <Badge bg={rule.is_active ? 'success' : 'light'} 
-                                 text={rule.is_active ? 'white' : 'dark'}>
-                            {rule.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </td>
-                        <td className="text-teal">
-                          {new Date(rule.created_at).toLocaleDateString()}
-                        </td>
-                        <td>
-                          <div className="d-flex gap-1">
-                            <Button 
-                              variant="outline-primary"
-                              size="sm"
-                              onClick={() => handleEdit(rule)}
-                            >
-                              <i className="bi bi-pencil"></i>
-                            </Button>
-                            <Button 
-                              variant="outline-secondary"
-                              size="sm"
-                              onClick={() => handleDelete(rule.rule_id)}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </Button>
-                          </div>
-                        </td>
+          {/* Tabs */}
+          <Card className="mb-4 border-0 shadow-sm">
+            <Card.Body className="p-0" style={{ background: 'white' }}>
+              <Nav variant="tabs" className="px-3 pt-2" style={{ borderBottom: '1px solid #dee2e6' }}>
+                <Nav.Item>
+                  <Nav.Link 
+                    active={activeTab === 'all'}
+                    onClick={() => setActiveTab('all')}
+                    style={{
+                      color: activeTab === 'all' ? '#1e3a5f' : '#5a7a99',
+                      fontWeight: activeTab === 'all' ? '600' : '400',
+                      border: 'none',
+                      borderBottom: activeTab === 'all' ? '3px solid #1e3a5f' : 'none'
+                    }}
+                  >
+                    All Rules ({rules.length})
+                  </Nav.Link>
+                </Nav.Item>
+                {ruleTypes.map(type => {
+                  const count = rules.filter(r => r.rule_type === type.value).length;
+                  const isActive = activeTab === type.value;
+                  return (
+                    <Nav.Item key={type.value}>
+                      <Nav.Link 
+                        active={isActive}
+                        onClick={() => setActiveTab(type.value)}
+                        style={{
+                          color: isActive ? '#1e3a5f' : '#5a7a99',
+                          fontWeight: isActive ? '600' : '400',
+                          border: 'none',
+                          borderBottom: isActive ? '3px solid #1e3a5f' : 'none'
+                        }}
+                      >
+                        {type.label} ({count})
+                      </Nav.Link>
+                    </Nav.Item>
+                  );
+                })}
+              </Nav>
+            </Card.Body>
+          </Card>
+
+          {/* Rules Table */}
+          <Card className="border-0 shadow-sm">
+            <Card.Body className="p-0">
+              {isLoading ? (
+                <div className="text-center p-5">
+                  <Spinner animation="border" style={{ color: '#1e3a5f' }} />
+                  <p className="mt-3" style={{ color: '#1e3a5f' }}>Loading rules...</p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <Table className="mb-0" style={{ minWidth: '800px' }}>
+                    <thead>
+                      <tr style={{ background: '#87CEEB' }}>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none' }}>Rule Name</th>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Type</th>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Priority</th>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Status</th>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Created</th>
+                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Actions</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            )}
-            
-            {getFilteredRules().length === 0 && !isLoading && (
-              <div className="text-center p-5 text-muted">
-                <i className="bi bi-inbox display-1"></i>
-                <h5>No rules found</h5>
-                <p>Start by creating your first scheduling rule.</p>
-              </div>
-            )}
-          </Card.Body>
-        </Card>
+                    </thead>
+                    <tbody>
+                      {getFilteredRules().map((rule, idx) => {
+                        const typeInfo = getRuleTypeInfo(rule.rule_type);
+                        return (
+                          <tr key={rule.rule_id}>
+                            <td className="fw-semibold align-middle" style={{ 
+                              color: '#1e3a5f', 
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none'
+                            }}>
+                              {rule.rule_name}
+                            </td>
+                            <td className="align-middle" style={{ 
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                              borderLeft: '1px solid #dee2e6'
+                            }}>
+                              <span style={{
+                                background: '#e6f4ff',
+                                color: '#1e3a5f',
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '0.85rem',
+                                fontWeight: '500'
+                              }}>
+                                {typeInfo.label}
+                              </span>
+                            </td>
+                            <td className="align-middle" style={{ 
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                              borderLeft: '1px solid #dee2e6'
+                            }}>
+                              <span style={{
+                                background: '#b0c4d4',
+                                color: '#1e3a5f',
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '0.85rem',
+                                fontWeight: '500'
+                              }}>
+                                Priority {rule.priority}
+                              </span>
+                            </td>
+                            <td className="align-middle" style={{ 
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                              borderLeft: '1px solid #dee2e6'
+                            }}>
+                              <span style={{
+                                background: rule.is_active ? '#87CEEB' : '#b0c4d4',
+                                color: '#1e3a5f',
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '0.85rem',
+                                fontWeight: '500'
+                              }}>
+                                {rule.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="align-middle" style={{ 
+                              color: '#5a7a99',
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                              borderLeft: '1px solid #dee2e6',
+                              fontSize: '0.9rem'
+                            }}>
+                              {new Date(rule.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="align-middle" style={{ 
+                              padding: '12px',
+                              background: 'white',
+                              border: 'none',
+                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                              borderLeft: '1px solid #dee2e6'
+                            }}>
+                              <div className="d-flex gap-2">
+                                <Button 
+                                  size="sm"
+                                  className="border-0"
+                                  style={{ background: '#87CEEB', color: '#1e3a5f', padding: '4px 12px' }}
+                                  onClick={() => handleEdit(rule)}
+                                >
+                                  <i className="bi bi-pencil"></i>
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  className="border-0"
+                                  style={{ background: '#b0c4d4', color: '#1e3a5f', padding: '4px 12px' }}
+                                  onClick={() => handleDelete(rule.rule_id)}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+              
+              {getFilteredRules().length === 0 && !isLoading && (
+                <div className="text-center p-5" style={{ color: '#5a7a99' }}>
+                  <i className="bi bi-inbox" style={{ fontSize: '4rem', opacity: 0.3 }}></i>
+                  <h5 className="mt-3">No rules found</h5>
+                  <p>Start by creating your first scheduling rule.</p>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
 
-        {/* Modal */}
-        <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
-          <Modal.Header closeButton className="bg-primary text-white">
-            <Modal.Title>
-              <i className="bi bi-gear me-2"></i>
-              {modalType === 'add' ? 'Add New Rule' : 'Edit Rule'}
-            </Modal.Title>
-          </Modal.Header>
-          <Modal.Body className="bg-beige">
-            <Form onSubmit={handleSubmit}>
-              <Row>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label className="text-navy">Rule Type</Form.Label>
-                    <Form.Select
-                      value={formData.rule_type}
-                      onChange={(e) => setFormData({...formData, rule_type: e.target.value})}
-                      required
-                    >
-                      {ruleTypes.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label className="text-navy">Priority (1 = Highest)</Form.Label>
-                    <Form.Select
-                      value={formData.priority}
-                      onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value)})}
-                      required
-                    >
-                      <option value={1}>1 - Critical</option>
-                      <option value={2}>2 - High</option>
-                      <option value={3}>3 - Medium</option>
-                      <option value={4}>4 - Low</option>
-                      <option value={5}>5 - Lowest</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-              </Row>
+          {/* Modal */}
+          <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+            <Modal.Header closeButton style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', border: 'none' }} className="text-white">
+              <Modal.Title className="fw-semibold">
+                <i className="bi bi-gear me-2"></i>
+                {modalType === 'add' ? 'Add New Rule' : 'Edit Rule'}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{ background: 'white' }}>
+              <Form onSubmit={handleSubmit}>
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Rule Type</Form.Label>
+                      <Form.Select
+                        value={formData.rule_type}
+                        onChange={(e) => setFormData({...formData, rule_type: e.target.value})}
+                        required
+                        className="border-2"
+                        style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                      >
+                        {ruleTypes.map(type => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Priority (1 = Highest)</Form.Label>
+                      <Form.Select
+                        value={formData.priority}
+                        onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value)})}
+                        required
+                        className="border-2"
+                        style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                      >
+                        <option value={1}>1 - Critical</option>
+                        <option value={2}>2 - High</option>
+                        <option value={3}>3 - Medium</option>
+                        <option value={4}>4 - Low</option>
+                        <option value={5}>5 - Lowest</option>
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
 
-              <Form.Group className="mb-3">
-                <Form.Label className="text-navy">Rule Name</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={formData.rule_name}
-                  onChange={(e) => setFormData({...formData, rule_name: e.target.value})}
-                  placeholder="Enter rule name"
-                  required
-                />
-              </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Rule Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={formData.rule_name}
+                    onChange={(e) => setFormData({...formData, rule_name: e.target.value})}
+                    placeholder="Enter rule name"
+                    required
+                    className="border-2"
+                    style={{ borderColor: '#87CEEB' }}
+                  />
+                </Form.Group>
 
-              <Form.Group className="mb-3">
-                <Form.Label className="text-navy">Description</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={3}
-                  value={formData.rule_description}
-                  onChange={(e) => setFormData({...formData, rule_description: e.target.value})}
-                  placeholder="Describe what this rule does"
-                  required
-                />
-              </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Description</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={formData.rule_description}
+                    onChange={(e) => setFormData({...formData, rule_description: e.target.value})}
+                    placeholder="Describe what this rule does"
+                    required
+                    className="border-2"
+                    style={{ borderColor: '#87CEEB' }}
+                  />
+                </Form.Group>
 
-              <Form.Group className="mb-3">
-                <Form.Check
-                  type="switch"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                  label="Rule is active"
-                  className="text-navy"
-                />
-              </Form.Group>
-            </Form>
-          </Modal.Body>
-          <Modal.Footer className="bg-beige">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={isLoading}>
-              {isLoading ? 'Saving...' : 'Save Rule'}
-            </Button>
-          </Modal.Footer>
-        </Modal>
-      </Container>
+                <Form.Group className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                    label="Rule is active"
+                    style={{ color: '#1e3a5f', fontWeight: '500' }}
+                  />
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer style={{ background: 'white', borderTop: '1px solid #dee2e6' }}>
+              <Button 
+                className="border-0"
+                style={{ background: '#b0c4d4', color: '#1e3a5f', padding: '8px 20px' }}
+                onClick={() => setShowModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="border-0 shadow-sm"
+                style={{ 
+                  background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                  color: 'white',
+                  padding: '8px 20px'
+                }}
+                onClick={handleSubmit} 
+                disabled={isLoading}
+              >
+                {isLoading ? 'Saving...' : 'Save Rule'}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+        </Container>
+      </div>
     </Layout>
   );
 };

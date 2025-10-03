@@ -14,7 +14,6 @@ const LoginPage: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (error) setError('');
   };
 
@@ -58,7 +57,6 @@ const LoginPage: React.FC = () => {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         
-        // Redirect to role-specific dashboard
         const dashboardPath = getRoleDashboard(data.user.role);
         router.push(dashboardPath);
       } else {
@@ -73,7 +71,6 @@ const LoginPage: React.FC = () => {
 
   return (
     <>
-      {/* Include Font Awesome for icons */}
       <link 
         rel="stylesheet" 
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
@@ -82,25 +79,24 @@ const LoginPage: React.FC = () => {
       <div 
         className="min-vh-100 d-flex align-items-center justify-content-center py-4"
         style={{ 
-          background: 'linear-gradient(135deg, #2F4156 0%, #567C8D 100%)'
+          background: 'linear-gradient(135deg, #1e3a5f 0%, #87CEEB 100%)'
         }}
       >
         <Container>
           <Row className="justify-content-center">
             <Col sm={10} md={6} lg={5} xl={4}>
-              {/* Header */}
               <div className="text-center text-white mb-4">
                 <div className="mb-3">
                   <i 
                     className="fas fa-graduation-cap"
                     style={{ 
                       fontSize: '3rem', 
-                      color: '#C8D9E6'
+                      color: 'white'
                     }}
                   ></i>
                 </div>
                 <h2 className="fw-bold mb-2">Welcome Back</h2>
-                <p className="mb-0" style={{ color: '#C8D9E6' }}>
+                <p className="mb-0" style={{ color: 'rgba(255,255,255,0.9)' }}>
                   Sign in to your account
                 </p>
               </div>
@@ -109,7 +105,7 @@ const LoginPage: React.FC = () => {
                 <Card.Header 
                   className="text-white text-center py-4 border-0"
                   style={{ 
-                    background: '#2F4156',
+                    background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
                     borderRadius: '20px 20px 0 0'
                   }}
                 >
@@ -119,18 +115,17 @@ const LoginPage: React.FC = () => {
                   </h4>
                 </Card.Header>
                 
-                <Card.Body className="p-4 p-md-5" style={{ background: '#F5EFEB' }}>
+                <Card.Body className="p-4 p-md-5" style={{ background: 'white' }}>
                   {error && (
-                    <Alert variant="danger" className="d-flex align-items-center mb-4">
+                    <Alert variant="danger" className="d-flex align-items-center mb-4 border-0">
                       <i className="fas fa-exclamation-triangle me-2"></i>
                       {error}
                     </Alert>
                   )}
 
                   <Form onSubmit={handleSubmit}>
-                    {/* Email */}
                     <Form.Group className="mb-4">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-envelope me-2"></i>
                         Email Address
                       </Form.Label>
@@ -142,14 +137,13 @@ const LoginPage: React.FC = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         placeholder="Enter your email"
-                        className="py-3"
-                        style={{ borderRadius: '12px' }}
+                        className="py-3 border-2"
+                        style={{ borderRadius: '12px', borderColor: '#87CEEB' }}
                       />
                     </Form.Group>
 
-                    {/* Password */}
                     <Form.Group className="mb-4">
-                      <Form.Label className="fw-bold" style={{ color: '#2F4156' }}>
+                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                         <i className="fas fa-lock me-2"></i>
                         Password
                       </Form.Label>
@@ -161,19 +155,18 @@ const LoginPage: React.FC = () => {
                         value={formData.password}
                         onChange={handleInputChange}
                         placeholder="Enter your password"
-                        className="py-3"
-                        style={{ borderRadius: '12px' }}
+                        className="py-3 border-2"
+                        style={{ borderRadius: '12px', borderColor: '#87CEEB' }}
                       />
                     </Form.Group>
 
-                    {/* Submit Button */}
                     <Button
                       type="submit"
-                      className="w-100 py-3 fw-bold border-0"
+                      className="w-100 py-3 fw-bold border-0 shadow-sm"
                       disabled={isLoading}
                       size="lg"
                       style={{ 
-                        background: '#2F4156',
+                        background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
                         borderRadius: '12px'
                       }}
                     >
@@ -191,14 +184,13 @@ const LoginPage: React.FC = () => {
                     </Button>
                   </Form>
 
-                  {/* Sign Up Link */}
                   <div className="text-center mt-4">
                     <p className="text-muted mb-0">
                       Don't have an account?{' '}
                       <a 
                         href="/auth/signup" 
                         className="text-decoration-none fw-bold"
-                        style={{ color: '#2F4156' }}
+                        style={{ color: '#1e3a5f' }}
                       >
                         Sign up
                       </a>

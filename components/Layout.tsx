@@ -1,6 +1,8 @@
 import React from 'react';
-import { Container, Navbar, Nav, Dropdown } from 'react-bootstrap';
+import { Container, Navbar, Nav, Button } from 'react-bootstrap';
 import { useRouter } from 'next/router';
+import 'bootstrap-icons/font/bootstrap-icons.css';
+import Image from 'next/image';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,7 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: 'fa-calendar',
     },
     {
-      href: '/committee/exam-timing',
+      href: '/scheduleCommittee/exam-timing',
       label: 'Exam Timing',
       icon: 'fa-clock',
     },
@@ -37,7 +39,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: 'fa-university',
     },
     {
-      href: '/committee/sections',
+      href: '/scheduleCommittee/sections',  
       label: 'Sections',
       icon: 'fa-users',
     },
@@ -52,7 +54,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <div
         style={{
-          background: 'linear-gradient(135deg, #2F4156 0%, #567C8D 100%)',
+          background: 'linear-gradient(135deg, #1e3a5f 0%, #87CEEB 100%)',
           minHeight: '100vh',
         }}
       >
@@ -60,13 +62,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Navbar
           expand="lg"
           variant="dark"
-          style={{ background: '#2F4156' }}
+          style={{ background: '#1e3a5f' }}
           className="shadow-sm"
         >
           <Container>
             <Navbar.Brand className="fw-bold d-flex align-items-center">
-              <i className="fas fa-calendar-check me-2"></i>
-              SmartSchedule
+              <Image 
+                src="/logo.png" 
+                alt="SmartSchedule Logo" 
+                width={40} 
+                height={40}
+                className="me-2"
+                style={{ objectFit: 'contain' }}
+              />
+              <span style={{ color: 'white' }}>SmartSchedule</span>
             </Navbar.Brand>
 
             <Navbar.Toggle aria-controls="basic-navbar-nav" />
@@ -83,10 +92,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     style={{
                       background:
                         router.pathname === item.href
-                          ? 'rgba(255,255,255,0.1)'
+                          ? '#87CEEB'
                           : 'transparent',
                       borderRadius: '8px',
                       margin: '0 2px',
+                      color: router.pathname === item.href ? '#1e3a5f' : 'white',
+                      fontWeight: router.pathname === item.href ? '600' : '400',
+                      transition: 'all 0.3s ease',
                     }}
                   >
                     <i className={`fas ${item.icon} me-2`}></i>
@@ -95,34 +107,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 ))}
               </Nav>
 
-              {/* Simplified dropdown with only Sign Out */}
-              <Dropdown align="end">
-                <Dropdown.Toggle
-                  variant="outline-light"
-                  id="user-dropdown"
-                  className="d-flex align-items-center border-0"
-                  style={{ background: 'rgba(255,255,255,0.1)' }}
-                >
-                  <i className="fas fa-sign-out-alt me-2"></i>
-                  Sign Out
-                </Dropdown.Toggle>
-
-                <Dropdown.Menu
-                  style={{
-                    background: '#F5EFEB',
-                    border: 'none',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                  }}
-                >
-                  <Dropdown.Item
-                    onClick={handleLogout}
-                    className="d-flex align-items-center text-danger"
-                  >
-                    <i className="fas fa-sign-out-alt me-2"></i>
-                    Logout
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
+              {/* Logout Button */}
+              <Button
+                onClick={handleLogout}
+                className="d-flex align-items-center border-0"
+                style={{ 
+                  background: '#87CEEB',
+                  color: '#1e3a5f',
+                  fontWeight: '600',
+                }}
+              >
+                <i className="fas fa-sign-out-alt me-2"></i>
+                Logout
+              </Button>
             </Navbar.Collapse>
           </Container>
         </Navbar>
