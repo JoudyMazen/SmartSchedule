@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import pool from '../../../lib/database'; // Three levels up: data -> api -> pages -> lib
+import pool from '../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -7,27 +7,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
-  const { level } = req.query;
+  const { level, excludeSWE } = req.query;
 
   try {
-    let query: string;
-    let params: any[] = [];
+    let query = `
+      SELECT course_code, course_name, level, is_elective, credits,
+             lecture_hours, tutorial_hours, lab_hours
+      FROM course
+    `;
+    const params: any[] = [];
+
+    // ✅ Add conditions dynamically
+    const conditions: string[] = [];
 
     if (level) {
-      query = `
-        SELECT course_code, course_name, level, is_elective, credits
-        FROM course
-        WHERE level = $1
-        ORDER BY course_code
-      `;
-      params = [level];
-    } else {
-      query = `
-        SELECT course_code, course_name, level, is_elective, credits
-        FROM course
-        ORDER BY level, course_code
-      `;
+      conditions.push(`level = $${params.length + 1}`);
+      params.push(level);
     }
+
+    // ✅ Exclude SWE courses if requested
+    if (excludeSWE === 'true') {
+      conditions.push(`course_code NOT LIKE 'SWE%'`);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(' AND ');
+    }
+
+    query += ` ORDER BY level, course_code`;
 
     const result = await pool.query(query, params);
 
@@ -35,7 +42,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       success: true,
       courses: result.rows
     });
-
   } catch (err) {
     console.error('Database error:', err);
     res.status(500).json({

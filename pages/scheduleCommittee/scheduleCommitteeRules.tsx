@@ -8,7 +8,6 @@ interface SchedulingRule {
   rule_name: string;
   rule_description: string;
   rule_type: string;
-  priority: number;
   is_active: boolean;
   created_at: string;
 }
@@ -17,7 +16,6 @@ interface RuleFormData {
   rule_name: string;
   rule_description: string;
   rule_type: string;
-  priority: number;
   is_active: boolean;
 }
 
@@ -34,7 +32,6 @@ const RuleManagementPage: React.FC = () => {
     rule_name: '',
     rule_description: '',
     rule_type: 'time_block',
-    priority: 3,
     is_active: true
   });
 
@@ -103,7 +100,6 @@ const RuleManagementPage: React.FC = () => {
       rule_name: '',
       rule_description: '',
       rule_type: 'time_block',
-      priority: 3,
       is_active: true
     });
     setEditingRule(null);
@@ -116,7 +112,6 @@ const RuleManagementPage: React.FC = () => {
       rule_name: rule.rule_name,
       rule_description: rule.rule_description,
       rule_type: rule.rule_type,
-      priority: rule.priority,
       is_active: rule.is_active
     });
     setShowModal(true);
@@ -153,7 +148,7 @@ const RuleManagementPage: React.FC = () => {
 
   return (
     <Layout>
-      <div style={{ background: '#ececec', minHeight: '100vh' }}>
+      <div style={{ background: '#f8f9fa', minHeight: '100vh' }}>
         <Container className="py-4">
           <div className="mb-4">
             <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
@@ -200,7 +195,7 @@ const RuleManagementPage: React.FC = () => {
 
           {/* Tabs */}
           <Card className="mb-4 border-0 shadow-sm">
-            <Card.Body className="p-0" style={{ background: 'white' }}>
+            <Card.Body className="p-0" style={{ background: '1e3a5f' }}>
               <Nav variant="tabs" className="px-3 pt-2" style={{ borderBottom: '1px solid #dee2e6' }}>
                 <Nav.Item>
                   <Nav.Link 
@@ -255,7 +250,6 @@ const RuleManagementPage: React.FC = () => {
                       <tr style={{ background: '#87CEEB' }}>
                         <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none' }}>Rule Name</th>
                         <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Type</th>
-                        <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Priority</th>
                         <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Status</th>
                         <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Created</th>
                         <th style={{ color: '#1e3a5f', fontWeight: '600', padding: '12px', border: 'none', borderLeft: '1px solid #dee2e6' }}>Actions</th>
@@ -291,24 +285,6 @@ const RuleManagementPage: React.FC = () => {
                                 fontWeight: '500'
                               }}>
                                 {typeInfo.label}
-                              </span>
-                            </td>
-                            <td className="align-middle" style={{ 
-                              padding: '12px',
-                              background: 'white',
-                              border: 'none',
-                              borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
-                              borderLeft: '1px solid #dee2e6'
-                            }}>
-                              <span style={{
-                                background: '#b0c4d4',
-                                color: '#1e3a5f',
-                                padding: '4px 12px',
-                                borderRadius: '12px',
-                                fontSize: '0.85rem',
-                                fontWeight: '500'
-                              }}>
-                                Priority {rule.priority}
                               </span>
                             </td>
                             <td className="align-middle" style={{ 
@@ -395,7 +371,7 @@ const RuleManagementPage: React.FC = () => {
             <Modal.Body style={{ background: 'white' }}>
               <Form onSubmit={handleSubmit}>
                 <Row>
-                  <Col md={6}>
+                  <Col md={12}>
                     <Form.Group className="mb-3">
                       <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Rule Type</Form.Label>
                       <Form.Select
@@ -410,24 +386,6 @@ const RuleManagementPage: React.FC = () => {
                             {type.label}
                           </option>
                         ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Priority (1 = Highest)</Form.Label>
-                      <Form.Select
-                        value={formData.priority}
-                        onChange={(e) => setFormData({...formData, priority: parseInt(e.target.value)})}
-                        required
-                        className="border-2"
-                        style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
-                      >
-                        <option value={1}>1 - Critical</option>
-                        <option value={2}>2 - High</option>
-                        <option value={3}>3 - Medium</option>
-                        <option value={4}>4 - Low</option>
-                        <option value={5}>5 - Lowest</option>
                       </Form.Select>
                     </Form.Group>
                   </Col>

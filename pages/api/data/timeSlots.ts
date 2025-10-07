@@ -7,9 +7,9 @@ const DEFAULT_TIME_SLOTS = [
   { time_slot: '09:00-09:50' },
   { time_slot: '10:00-10:50' },
   { time_slot: '11:00-11:50' },
+  { time_slot: '12:00-12:50' },
   { time_slot: '13:00-13:50' },
   { time_slot: '14:00-14:50' },
-  { time_slot: '15:00-15:50' },
   // 2-hour slots (1 hour 50 minutes)
   { time_slot: '08:00-09:50' },
   { time_slot: '09:00-10:50' },

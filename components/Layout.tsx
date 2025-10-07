@@ -24,11 +24,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: 'fa-calendar',
     },
     {
-      href: '/scheduleCommittee/exam-timing',
-      label: 'Exam Timing',
-      icon: 'fa-clock',
-    },
-    {
       href: '/scheduleCommittee/scheduleCommitteeRules',
       label: 'Rules',
       icon: 'fa-gavel',
@@ -70,7 +65,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <Image 
                 src="/logo.png" 
                 alt="SmartSchedule Logo" 
-                width={40} 
+                width={100} 
                 height={40}
                 className="me-2"
                 style={{ objectFit: 'contain' }}

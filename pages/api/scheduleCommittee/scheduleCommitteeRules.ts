@@ -7,7 +7,6 @@ interface SchedulingRule {
   rule_name: string;
   rule_description: string;
   rule_type: string;
-  priority: number;
   is_active: boolean;
   created_at: string;
 }
@@ -16,7 +15,6 @@ interface CreateRuleRequest {
   rule_name: string;
   rule_description: string;
   rule_type: string;
-  priority: number;
   is_active: boolean;
 }
 
@@ -34,7 +32,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
     const { type } = req.query;
     
     let query = `
-      SELECT rule_id, rule_name, rule_description, rule_type, priority, is_active, created_at
+      SELECT rule_id, rule_name, rule_description, rule_type, is_active, created_at
       FROM scheduling_rule
     `;
     
@@ -45,7 +43,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
       params.push(type);
     }
     
-    query += ' ORDER BY priority ASC, created_at DESC';
+    query += ' ORDER BY created_at DESC';
     
     const result = await pool.query(query, params);
     
@@ -66,7 +64,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
 // POST - Create new rule
 async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   try {
-    const { rule_name, rule_description, rule_type, priority, is_active }: CreateRuleRequest = req.body;
+    const { rule_name, rule_description, rule_type, is_active }: CreateRuleRequest = req.body;
     
     if (!rule_name || !rule_description || !rule_type) {
       return res.status(400).json({
@@ -83,25 +81,16 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>
       });
     }
     
-    const rulePriority = priority || 3;
-    if (rulePriority < 1 || rulePriority > 5) {
-      return res.status(400).json({
-        success: false,
-        message: 'Priority must be between 1 and 5'
-      });
-    }
-    
     const query = `
-      INSERT INTO scheduling_rule (rule_name, rule_description, rule_type, priority, is_active)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING rule_id, rule_name, rule_description, rule_type, priority, is_active, created_at
+      INSERT INTO scheduling_rule (rule_name, rule_description, rule_type, is_active)
+      VALUES ($1, $2, $3, $4)
+      RETURNING rule_id, rule_name, rule_description, rule_type, is_active, created_at
     `;
     
     const result = await pool.query(query, [
       rule_name,
       rule_description,
       rule_type,
-      rulePriority,
       is_active !== undefined ? is_active : true
     ]);
     
@@ -124,7 +113,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse<ApiResponse>
 async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   try {
     const { id } = req.query;
-    const { rule_name, rule_description, rule_type, priority, is_active }: Partial<CreateRuleRequest> = req.body;
+    const { rule_name, rule_description, rule_type, is_active }: Partial<CreateRuleRequest> = req.body;
     
     if (!id || typeof id !== 'string') {
       return res.status(400).json({
@@ -153,29 +142,20 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
       }
     }
     
-    if (priority !== undefined && (priority < 1 || priority > 5)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Priority must be between 1 and 5'
-      });
-    }
-    
     const query = `
       UPDATE scheduling_rule 
       SET rule_name = COALESCE($1, rule_name),
           rule_description = COALESCE($2, rule_description),
           rule_type = COALESCE($3, rule_type),
-          priority = COALESCE($4, priority),
-          is_active = COALESCE($5, is_active)
-      WHERE rule_id = $6
-      RETURNING rule_id, rule_name, rule_description, rule_type, priority, is_active, created_at
+          is_active = COALESCE($4, is_active)
+      WHERE rule_id = $5
+      RETURNING rule_id, rule_name, rule_description, rule_type, is_active, created_at
     `;
     
     const result = await pool.query(query, [
       rule_name,
       rule_description,
       rule_type,
-      priority,
       is_active,
       id
     ]);
@@ -194,6 +174,7 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse<ApiResponse>)
     });
   }
 }
+
 // DELETE - Delete rule
 async function handleDelete(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
   try {
