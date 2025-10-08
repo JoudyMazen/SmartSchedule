@@ -1,6 +1,6 @@
 // pages/api/scheduleCommittee/scheduleCommitteeHomePage.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import pool from '../../../lib/database';
+import pool from '../../../lib/db';
 
 interface ScheduleEntry {
   schedule_id: number;

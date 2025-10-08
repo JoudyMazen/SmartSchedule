@@ -1,4 +1,4 @@
-import pool from './database';
+import pool from './db';
 
 export interface Schedule {
   schedule_id: number;

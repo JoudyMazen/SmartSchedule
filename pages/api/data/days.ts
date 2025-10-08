@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import pool from '../../../lib/database';
+import pool from '../../../lib/db';
 
 const DEFAULT_DAYS = [
   { day: 'Sunday' },

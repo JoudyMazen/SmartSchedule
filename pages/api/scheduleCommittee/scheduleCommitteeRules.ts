@@ -1,6 +1,6 @@
 // pages/api/scheduleCommittee/scheduleCommitteeRules.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import pool from '../../../lib/database'; // Use shared pool
+import pool from '../../../lib/db'; // Use shared pool
 
 interface SchedulingRule {
   rule_id: number;

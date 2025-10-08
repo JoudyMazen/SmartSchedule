@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import pool from './database';
+import pool from './db';
 
 // ----------------- TYPES -----------------
 export interface User {
@@ -142,5 +142,42 @@ export async function getUserById(userId: number): Promise<User | null> {
     };
   } catch (error) {
     return null;
+  }
+}
+
+// Add these functions to the end of your existing lib/auth.ts
+
+// ----------------- GET USER BY EMAIL -----------------
+export async function getUserByEmail(email: string): Promise<any | null> {
+  try {
+    const result = await pool.query(
+      `SELECT user_id, first_name, last_name, email, phone, role
+       FROM "user" WHERE email = $1`,
+      [email]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('Get user by email error:', error);
+    return null;
+  }
+}
+
+// ----------------- UPDATE PASSWORD -----------------
+export async function updatePassword(userId: number, newPassword: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const hashedPassword = await hashPassword(newPassword);
+    
+    await pool.query(
+      'UPDATE "user" SET password = $1 WHERE user_id = $2',
+      [hashedPassword, userId]
+    );
+
+    return { success: true, message: 'Password updated successfully' };
+  } catch (error) {
+    console.error('Update password error:', error);
+    return { success: false, message: 'Failed to update password' };
   }
 }
