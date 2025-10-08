@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import pool from '../../../lib/database';
+import pool from '../../../lib/db';
 
 interface SectionData {
   section_id: number;

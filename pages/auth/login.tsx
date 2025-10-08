@@ -9,6 +9,7 @@ const LoginPage: React.FC = () => {
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,17 +150,28 @@ const LoginPage: React.FC = () => {
                         <i className="fas fa-lock me-2"></i>
                         Password
                       </Form.Label>
-                      <Form.Control
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        placeholder="Enter your password"
-                        className="py-3 border-2"
-                        style={{ borderRadius: '12px', borderColor: '#87CEEB' }}
-                      />
+                      <div className="position-relative">
+                        <Form.Control
+                          id="password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          required
+                          value={formData.password}
+                          onChange={handleInputChange}
+                          placeholder="Enter your password"
+                          className="py-3 border-2 pe-5"
+                          style={{ borderRadius: '12px', borderColor: '#87CEEB' }}
+                        />
+                        <Button
+                          variant="link"
+                          className="position-absolute end-0 top-50 translate-middle-y"
+                          style={{ zIndex: 10, color: '#1e3a5f', textDecoration: 'none' }}
+                          onClick={() => setShowPassword(!showPassword)}
+                          type="button"
+                        >
+                          <i className={`fas ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i>
+                        </Button>
+                      </div>
                     </Form.Group>
 
                     <Button
@@ -171,6 +183,8 @@ const LoginPage: React.FC = () => {
                         background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
                         borderRadius: '12px'
                       }}
+
+                      
                     >
                       {isLoading ? (
                         <>
@@ -183,7 +197,18 @@ const LoginPage: React.FC = () => {
                           Sign In
                         </>
                       )}
+                       
                     </Button>
+                   {/* Add this after your password Form.Group */}
+                   <div className="text-end mb-3">
+                      <a 
+                      href="/auth/forgot-password" 
+                      className="text-decoration-none"
+                      style={{ color: '#1e3a5f', fontSize: '0.9rem' }}
+                       >
+                        Forgot Password?
+                          </a>
+                          </div>
                   </Form>
 
                   <div className="text-center mt-4">

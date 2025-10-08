@@ -1,8 +1,9 @@
 // pages/api/ai/generate-schedule.ts
 // NOW SUPPORTS BOTH SINGLE GROUP AND MULTI-GROUP GENERATION!
 import { NextApiRequest, NextApiResponse } from "next";
-import pool from "../../../lib/database";
-import { geminiModel } from "../../../lib/gemini";
+import pool from "../../../lib/db";       // استخدمنا النسخة الصحيحة اللي موجودة عندك حالياً
+import { geminiModel } from "../../../lib/gemini";  // احتفظنا بالكود الإضافي من HEAD
+
 
 interface Course {
   course_code: string;

@@ -33,6 +33,8 @@ const SignupPage: React.FC = () => {
   const [errors, setErrors] = useState<Errors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validatePhone = (phone: string): boolean => {
     const cleaned = phone.replace(/\D/g, '');
@@ -421,16 +423,27 @@ const SignupPage: React.FC = () => {
                         <i className="fas fa-lock me-2"></i>
                         Password *
                       </Form.Label>
-                      <Form.Control
-                        name="password"
-                        type="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        isInvalid={!!errors.password}
-                        placeholder="Create a strong password"
-                        className="py-2 border-2"
-                        style={{ borderColor: errors.password ? undefined : '#87CEEB' }}
-                      />
+                      <div className="position-relative">
+                        <Form.Control
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          value={formData.password}
+                          onChange={handleInputChange}
+                          isInvalid={!!errors.password}
+                          placeholder="Create a strong password"
+                          className="py-2 border-2 pe-5"
+                          style={{ borderColor: errors.password ? undefined : '#87CEEB' }}
+                        />
+                        <Button
+                          variant="link"
+                          className="position-absolute end-0 top-50 translate-middle-y"
+                          style={{ zIndex: 10, color: '#1e3a5f', textDecoration: 'none' }}
+                          onClick={() => setShowPassword(!showPassword)}
+                          type="button"
+                        >
+                          <i className={`fas ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i>
+                        </Button>
+                      </div>
                       {formData.password && <PasswordStrengthIndicator />}
                       <Form.Control.Feedback type="invalid">
                         {errors.password}
@@ -442,16 +455,27 @@ const SignupPage: React.FC = () => {
                         <i className="fas fa-lock me-2"></i>
                         Confirm Password *
                       </Form.Label>
-                      <Form.Control
-                        name="confirmPassword"
-                        type="password"
-                        value={formData.confirmPassword}
-                        onChange={handleInputChange}
-                        isInvalid={!!errors.confirmPassword}
-                        placeholder="Confirm your password"
-                        className="py-2 border-2"
-                        style={{ borderColor: errors.confirmPassword ? undefined : '#87CEEB' }}
-                      />
+                      <div className="position-relative">
+                        <Form.Control
+                          name="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={formData.confirmPassword}
+                          onChange={handleInputChange}
+                          isInvalid={!!errors.confirmPassword}
+                          placeholder="Confirm your password"
+                          className="py-2 border-2 pe-5"
+                          style={{ borderColor: errors.confirmPassword ? undefined : '#87CEEB' }}
+                        />
+                        <Button
+                          variant="link"
+                          className="position-absolute end-0 top-50 translate-middle-y"
+                          style={{ zIndex: 10, color: '#1e3a5f', textDecoration: 'none' }}
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          type="button"
+                        >
+                          <i className={`fas ${showConfirmPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i>
+                        </Button>
+                      </div>
                       <Form.Control.Feedback type="invalid">
                         {errors.confirmPassword}
                       </Form.Control.Feedback>
