@@ -14,46 +14,40 @@ interface ScheduleEntry {
   group_num: number;
   activity_type?: string;
   status?: string;
-}
-
-interface ExamEntry {
-  exam_id: number;
-  course_code: string;
-  course_name: string;
-  exam_date: string;
-  exam_time: string;
-  room: string;
-  level: number;
-  group_num?: number;
+  version?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface ElectiveCourse {
-  course_id: number;
   course_code: string;
   course_name: string;
-  department: string;
-  available_sections: number;
   level: number;
+  is_elective: boolean;
+  credits: number;
+  lecture_hours: number;
+  tutorial_hours: number;
+  lab_hours: number;
 }
 
 interface StudentPreference {
   preference_id?: number;
   student_id: number;
-  course_id: number;
+  course_code: string;
   priority: number;
   created_at?: string;
+  course_name?: string;
 }
 
 interface Feedback {
   feedback_id?: number;
-  schedule_id?: number;
-  exam_id?: number;
-  student_id: number;
+  schedule_id: number;
+  user_id: number;
   comment: string;
   feedback_type: string;
-  level: number;
-  group_num: number;
+  rating?: number;
   created_at?: string;
+  user_name?: string;
 }
 
 interface TimeSlot {
@@ -64,13 +58,25 @@ interface Day {
   day: string;
 }
 
+interface Student {
+  user_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  level: number;
+  group_num: number;
+}
+
 const StudentHomePage: React.FC = () => {
-  const [student, setStudent] = useState<any>(null);
+  // User state
+  const [student, setStudent] = useState<Student | null>(null);
+  
+  // Schedule state
   const [selectedLevel, setSelectedLevel] = useState<number>(3);
   const [selectedGroup, setSelectedGroup] = useState<number>(1);
   const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [filteredScheduleData, setFilteredScheduleData] = useState<ScheduleEntry[]>([]);
-  const [examData, setExamData] = useState<ExamEntry[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -79,24 +85,22 @@ const StudentHomePage: React.FC = () => {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDay, setFilterDay] = useState('');
+  const [filterCourse, setFilterCourse] = useState('');
 
-  // Elective survey state
+  // Elective courses state
   const [electiveCourses, setElectiveCourses] = useState<ElectiveCourse[]>([]);
-  const [selectedElectives, setSelectedElectives] = useState<{[key: number]: number}>({});
-  const [myPreferences, setMyPreferences] = useState<StudentPreference[]>([]);
-  const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [selectedElectives, setSelectedElectives] = useState<string[]>([]);
+  const [showElectiveModal, setShowElectiveModal] = useState(false);
+  const [isSubmittingElectives, setIsSubmittingElectives] = useState(false);
 
-  // Feedback state
+  // Feedback states
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
-  const [feedbackType, setFeedbackType] = useState<string>('schedule');
-  const [feedbackTarget, setFeedbackTarget] = useState<'schedule' | 'exam'>('schedule');
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackType, setFeedbackType] = useState<string>('general');
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(null);
-  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
-  const [myFeedbacks, setMyFeedbacks] = useState<Feedback[]>([]);
-
-  // Active view
-  const [activeView, setActiveView] = useState<'schedule' | 'exam'>('schedule');
+  const [existingFeedback, setExistingFeedback] = useState<Feedback | null>(null);
 
   const levels = [3, 4, 5, 6, 7, 8];
 
@@ -113,14 +117,12 @@ const StudentHomePage: React.FC = () => {
   };
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const user = JSON.parse(userData);
-      setStudent(user);
-      setSelectedLevel(user.level || 3);
-      setSelectedGroup(user.group_num || 1);
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    if (userData && userData.role === 'student') {
+      setStudent(userData);
+      setSelectedLevel(userData.level || 3);
+      setSelectedGroup(userData.group_num || 1);
     }
-    
     fetchTimeSlots();
     fetchDays();
   }, []);
@@ -128,16 +130,14 @@ const StudentHomePage: React.FC = () => {
   useEffect(() => {
     if (student) {
       fetchSchedule();
-      fetchExams();
-      fetchMyFeedbacks();
+      fetchFeedbacks();
       fetchElectiveCourses();
-      fetchMyPreferences();
     }
   }, [selectedLevel, selectedGroup, student]);
 
   useEffect(() => {
     filterScheduleData();
-  }, [scheduleData, searchTerm, filterDay]);
+  }, [scheduleData, searchTerm, filterDay, filterCourse]);
 
   const fetchTimeSlots = async () => {
     try {
@@ -181,27 +181,9 @@ const StudentHomePage: React.FC = () => {
     }
   };
 
-  const fetchExams = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/data/exams?level=${selectedLevel}&group=${selectedGroup}`);
-      const data = await response.json();
-      if (data.success && data.exams) {
-        setExamData(data.exams);
-      } else {
-        setExamData([]);
-      }
-    } catch (error) {
-      console.error('Error fetching exams:', error);
-      setAlert({type: 'danger', message: 'Error fetching exam data'});
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const fetchElectiveCourses = async () => {
     try {
-      const response = await fetch(`/api/student/electiveCourses?level=${selectedLevel}`);
+      const response = await fetch(`/api/data/courses?is_elective=true&level=${selectedLevel}`);
       const data = await response.json();
       if (data.success) {
         setElectiveCourses(data.courses || []);
@@ -211,34 +193,43 @@ const StudentHomePage: React.FC = () => {
     }
   };
 
-  const fetchMyPreferences = async () => {
+  const fetchFeedbacks = async () => {
     if (!student) return;
+    
     try {
-      const response = await fetch(`/api/student/preferences?student_id=${student.user_id}`);
+      const response = await fetch(`/api/teachingLoadCommittee/feedback?user_id=${student.user_id}`);
       const data = await response.json();
       if (data.success) {
-        setMyPreferences(data.preferences || []);
-        const preSelected: {[key: number]: number} = {};
-        data.preferences.forEach((pref: StudentPreference) => {
-          preSelected[pref.course_id] = pref.priority;
-        });
-        setSelectedElectives(preSelected);
-      }
-    } catch (error) {
-      console.error('Error fetching preferences:', error);
-    }
-  };
-
-  const fetchMyFeedbacks = async () => {
-    if (!student) return;
-    try {
-      const response = await fetch(`/api/student/feedback?student_id=${student.user_id}&level=${selectedLevel}&group=${selectedGroup}`);
-      const data = await response.json();
-      if (data.success) {
-        setMyFeedbacks(data.feedbacks || []);
+        setFeedbacks(data.feedbacks || []);
       }
     } catch (error) {
       console.error('Error fetching feedbacks:', error);
+    }
+  };
+
+  const fetchExistingFeedback = async (scheduleId: number) => {
+    if (!student?.user_id) return;
+    try {
+      const response = await fetch(`/api/teachingLoadCommittee/feedback?user_id=${student.user_id}&schedule_id=${scheduleId}`);
+      const data = await response.json();
+      if (data.success && data.feedbacks && data.feedbacks.length > 0) {
+        const feedback = data.feedbacks[0];
+        setExistingFeedback(feedback);
+        setFeedbackText(feedback.comment);
+        setFeedbackRating(feedback.rating || 5);
+        setFeedbackType(feedback.feedback_type || 'general');
+      } else {
+        setExistingFeedback(null);
+        setFeedbackText('');
+        setFeedbackRating(5);
+        setFeedbackType('general');
+      }
+    } catch (error) {
+      console.error('Error fetching existing feedback:', error);
+      setExistingFeedback(null);
+      setFeedbackText('');
+      setFeedbackRating(5);
+      setFeedbackType('general');
     }
   };
 
@@ -257,72 +248,36 @@ const StudentHomePage: React.FC = () => {
       filtered = filtered.filter(entry => entry.day === filterDay);
     }
 
+    if (filterCourse) {
+      filtered = filtered.filter(entry => entry.course_code === filterCourse);
+    }
+
     setFilteredScheduleData(filtered);
-  };
-
-  const handleElectiveSelection = (courseId: number, priority: number) => {
-    setSelectedElectives(prev => ({
-      ...prev,
-      [courseId]: priority
-    }));
-  };
-
-  const handleSubmitPreferences = async () => {
-    if (Object.keys(selectedElectives).length === 0) {
-      setAlert({type: 'warning', message: 'Please select at least one elective course'});
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const preferences = Object.entries(selectedElectives).map(([courseId, priority]) => ({
-        student_id: student.user_id,
-        course_id: parseInt(courseId),
-        priority: priority
-      }));
-
-      const response = await fetch('/api/student/preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preferences })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setAlert({type: 'success', message: 'Elective preferences submitted successfully!'});
-        setShowSurveyModal(false);
-        fetchMyPreferences();
-      } else {
-        setAlert({type: 'danger', message: data.error || 'Failed to submit preferences'});
-      }
-    } catch (error) {
-      console.error('Error submitting preferences:', error);
-      setAlert({type: 'danger', message: 'Error submitting preferences'});
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleSubmitFeedback = async () => {
     if (!feedbackText.trim()) {
-      setAlert({type: 'warning', message: 'Please enter your feedback'});
+      setAlert({type: 'warning', message: 'Please enter feedback text'});
+      return;
+    }
+
+    if (!student) {
+      setAlert({type: 'danger', message: 'Student information not available'});
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/student/feedback', {
+      const response = await fetch('/api/teachingLoadCommittee/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          student_id: student.user_id,
-          schedule_id: feedbackTarget === 'schedule' ? selectedScheduleId : null,
-          exam_id: feedbackTarget === 'exam' ? selectedExamId : null,
+          schedule_id: selectedScheduleId,
+          user_id: student.user_id,
           comment: feedbackText,
           feedback_type: feedbackType,
-          feedback_target: feedbackTarget,
-          level: selectedLevel,
-          group_num: selectedGroup
+          level: student.level,
+          rating: feedbackRating
         })
       });
 
@@ -330,10 +285,10 @@ const StudentHomePage: React.FC = () => {
       if (data.success) {
         setAlert({type: 'success', message: 'Feedback submitted successfully!'});
         setFeedbackText('');
+        setFeedbackRating(5);
+        setFeedbackType('general');
         setShowFeedbackModal(false);
-        setSelectedScheduleId(null);
-        setSelectedExamId(null);
-        fetchMyFeedbacks();
+        fetchFeedbacks();
       } else {
         setAlert({type: 'danger', message: data.error || 'Failed to submit feedback'});
       }
@@ -345,26 +300,56 @@ const StudentHomePage: React.FC = () => {
     }
   };
 
-  const openScheduleFeedbackModal = (scheduleId?: number) => {
-    setFeedbackTarget('schedule');
-    setSelectedScheduleId(scheduleId || null);
-    setSelectedExamId(null);
-    setFeedbackType('schedule');
-    setFeedbackText('');
+  const openFeedbackModal = async (entry: ScheduleEntry) => {
+    setSelectedScheduleId(entry.schedule_id);
     setShowFeedbackModal(true);
+    await fetchExistingFeedback(entry.schedule_id);
   };
 
-  const openExamFeedbackModal = (examId?: number) => {
-    setFeedbackTarget('exam');
-    setSelectedExamId(examId || null);
-    setSelectedScheduleId(null);
-    setFeedbackType('exam');
-    setFeedbackText('');
-    setShowFeedbackModal(true);
+  const handleElectiveSelection = (courseCode: string, checked: boolean) => {
+    if (checked) {
+      setSelectedElectives(prev => [...prev, courseCode]);
+    } else {
+      setSelectedElectives(prev => prev.filter(code => code !== courseCode));
+    }
+  };
+
+  const handleSubmitElectives = async () => {
+    if (!student) {
+      setAlert({type: 'danger', message: 'Student information not available'});
+      return;
+    }
+
+    setIsSubmittingElectives(true);
+    try {
+      const response = await fetch('/api/student/elective-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.user_id,
+          level: selectedLevel,
+          electiveIds: selectedElectives
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setAlert({type: 'success', message: 'Elective preferences submitted successfully!'});
+        setShowElectiveModal(false);
+        setSelectedElectives([]);
+      } else {
+        setAlert({type: 'danger', message: data.error || 'Failed to submit elective preferences'});
+      }
+    } catch (error) {
+      console.error('Error submitting elective preferences:', error);
+      setAlert({type: 'danger', message: 'Error submitting elective preferences'});
+    } finally {
+      setIsSubmittingElectives(false);
+    }
   };
 
   const shouldRenderCell = (day: string, currentTimeSlot: string): { render: boolean; rowSpan: number; entry: ScheduleEntry | null } => {
-    const [currentStart] = currentTimeSlot.split('-').map(t => t.trim());
+    const [currentStart, currentEnd] = currentTimeSlot.split('-').map(t => t.trim());
     const currentStartHour = parseInt(currentStart.split(':')[0]);
     const currentStartMin = parseInt(currentStart.split(':')[1]);
 
@@ -411,34 +396,28 @@ const StudentHomePage: React.FC = () => {
     return (
       <Card className="shadow-sm border-0 overflow-hidden">
         <Card.Header
-          className="py-3 d-flex justify-content-between align-items-center"
+          className="py-3"
           style={{
             background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
             color: 'white',
             border: 'none'
           }}
         >
-          <h5 className="mb-0 fw-semibold">
-            <i className="bi bi-calendar-week me-2"></i>
-            My Schedule - Level {selectedLevel}, Group {selectedGroup}
-          </h5>
-          <Button
-            size="sm"
-            style={{
-              background: '#87CEEB',
-              color: '#1e3a5f',
-              border: 'none',
-              fontWeight: '600'
-            }}
-            onClick={() => openScheduleFeedbackModal()}
-          >
-            <i className="bi bi-chat-dots me-1"></i>
-            Give Feedback
-          </Button>
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="mb-0 fw-semibold">
+              <i className="bi bi-calendar-week me-2"></i>
+              My Schedule - Level {selectedLevel}, Group {selectedGroup}
+            </h5>
+            {scheduleData.length > 0 && (
+              <Badge bg="light" text="dark" className="px-3 py-2">
+                Latest v{scheduleData[0]?.version || 1}
+              </Badge>
+            )}
+          </div>
         </Card.Header>
         <Card.Body className="p-0">
           <div style={{ overflowX: 'auto' }}>
-            <Table className="mb-0" style={{ minWidth: '800px' }}>
+            <Table className="mb-0" style={{ minWidth: '1000px' }}>
               <thead>
                 <tr style={{ background: '#87CEEB' }}>
                   <th
@@ -470,6 +449,20 @@ const StudentHomePage: React.FC = () => {
                       {d.day}
                     </th>
                   ))}
+                  <th
+                    className="text-center"
+                    style={{
+                      color: '#1e3a5f',
+                      fontWeight: '600',
+                      padding: '12px',
+                      fontSize: '0.9rem',
+                      border: 'none',
+                      borderLeft: '1px solid #dee2e6',
+                      background: '#87CEEB'
+                    }}
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -532,129 +525,95 @@ const StudentHomePage: React.FC = () => {
                                 {entry.course_name}
                               </div>
                               {entry.activity_type && (
-                                <div className="small mt-1">
+                                <div
+                                  className="small mt-1"
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    color: '#1e3a5f'
+                                  }}
+                                >
                                   <span style={{
                                     background: entry.activity_type === 'Lecture' ? '#e3f2fd' : 
                                                entry.activity_type === 'Lab' ? '#f3e5f5' : '#e8f5e9',
                                     padding: '2px 8px',
                                     borderRadius: '8px',
-                                    fontSize: '0.7rem',
-                                    color: '#1e3a5f'
+                                    fontSize: '0.7rem'
                                   }}>
                                     {entry.activity_type}
                                   </span>
                                 </div>
                               )}
-                              {entry.instructor && (
-                                <div className="small mt-1 fw-semibold" style={{ fontSize: '0.75rem', color: '#1e3a5f' }}>
-                                  <i className="bi bi-person-fill me-1"></i>
-                                  {entry.instructor}
-                                </div>
-                              )}
                               {entry.room && (
-                                <div className="small mt-1" style={{ fontSize: '0.75rem', color: '#1e3a5f', fontWeight: '500' }}>
+                                <div
+                                  className="small mt-1"
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    color: '#1e3a5f',
+                                    fontWeight: '500'
+                                  }}
+                                >
                                   <i className="bi bi-geo-alt-fill me-1"></i>
                                   {entry.room}
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <div className="text-muted" style={{ fontSize: '0.85rem', opacity: 0.4 }}>
+                            <div
+                              className="text-muted"
+                              style={{
+                                fontSize: '0.85rem',
+                                opacity: 0.4
+                              }}
+                            >
                               —
                             </div>
                           )}
                         </td>
                       );
                     })}
+                    {/* Actions column */}
+                    <td
+                      className="text-center align-middle"
+                      style={{
+                        minHeight: '90px',
+                        background: 'white',
+                        padding: '12px',
+                        border: 'none',
+                        borderTop: idx > 0 ? '1px solid #dee2e6' : 'none',
+                        borderLeft: '1px solid #dee2e6',
+                        verticalAlign: 'middle'
+                      }}
+                    >
+                      {(() => {
+                        const entriesForTimeSlot = filteredScheduleData.filter(entry => 
+                          entry.time_slot === ts.time_slot
+                        );
+                        
+                        if (entriesForTimeSlot.length > 0) {
+                          const entry = entriesForTimeSlot[0];
+                          return (
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              onClick={() => openFeedbackModal(entry)}
+                              style={{
+                                fontSize: '0.7rem',
+                                padding: '4px 12px'
+                              }}
+                            >
+                              <i className="bi bi-chat-dots me-1"></i>
+                              Feedback
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </Table>
           </div>
-        </Card.Body>
-      </Card>
-    );
-  };
-
-  const renderExamView = () => {
-    return (
-      <Card className="shadow-sm border-0 overflow-hidden">
-        <Card.Header
-          className="py-3 d-flex justify-content-between align-items-center"
-          style={{
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
-            color: 'white',
-            border: 'none'
-          }}
-        >
-          <h5 className="mb-0 fw-semibold">
-            <i className="bi bi-file-text me-2"></i>
-            Exam Timetable - Level {selectedLevel}, Group {selectedGroup}
-          </h5>
-          <Button
-            size="sm"
-            style={{
-              background: '#87CEEB',
-              color: '#1e3a5f',
-              border: 'none',
-              fontWeight: '600'
-            }}
-            onClick={() => openExamFeedbackModal()}
-          >
-            <i className="bi bi-chat-dots me-1"></i>
-            Give Feedback
-          </Button>
-        </Card.Header>
-        <Card.Body>
-          {examData.length === 0 ? (
-            <div className="text-center p-5">
-              <i className="bi bi-calendar-x text-muted" style={{ fontSize: '3rem' }}></i>
-              <p className="text-muted mt-3">No exam schedule available yet</p>
-            </div>
-          ) : (
-            <Table striped hover responsive>
-              <thead style={{ background: '#87CEEB' }}>
-                <tr>
-                  <th style={{ color: '#1e3a5f' }}>Course Code</th>
-                  <th style={{ color: '#1e3a5f' }}>Course Name</th>
-                  <th style={{ color: '#1e3a5f' }}>Date</th>
-                  <th style={{ color: '#1e3a5f' }}>Time</th>
-                  <th style={{ color: '#1e3a5f' }}>Room</th>
-                  <th style={{ color: '#1e3a5f' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {examData.map((exam, idx) => (
-                  <tr key={idx}>
-                    <td className="fw-semibold">{exam.course_code}</td>
-                    <td>{exam.course_name}</td>
-                    <td>
-                      <i className="bi bi-calendar-event me-2"></i>
-                      {new Date(exam.exam_date).toLocaleDateString()}
-                    </td>
-                    <td>
-                      <i className="bi bi-clock me-2"></i>
-                      {exam.exam_time}
-                    </td>
-                    <td>
-                      <i className="bi bi-geo-alt me-2"></i>
-                      {exam.room}
-                    </td>
-                    <td>
-                      <Button
-                        size="sm"
-                        variant="outline-primary"
-                        onClick={() => openExamFeedbackModal(exam.exam_id)}
-                      >
-                        <i className="bi bi-chat-square-text me-1"></i>
-                        Feedback
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
         </Card.Body>
       </Card>
     );
@@ -669,7 +628,7 @@ const StudentHomePage: React.FC = () => {
               Student Dashboard
             </h2>
             <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-              View your schedule, exam timetable, submit elective preferences, and provide feedback
+              View your schedule and manage elective preferences
             </p>
           </div>
 
@@ -712,10 +671,10 @@ const StudentHomePage: React.FC = () => {
                         color: '#1e3a5f',
                         padding: '8px 20px'
                       }}
-                      onClick={() => setShowSurveyModal(true)}
+                      onClick={() => setShowElectiveModal(true)}
                     >
-                      <i className="bi bi-card-checklist me-2"></i>
-                      Elective Survey
+                      <i className="bi bi-book me-2"></i>
+                      Select Electives
                     </Button>
                     <Button
                       className="border-0 shadow-sm"
@@ -724,10 +683,7 @@ const StudentHomePage: React.FC = () => {
                         color: '#1e3a5f',
                         padding: '8px 20px'
                       }}
-                      onClick={() => {
-                        fetchSchedule();
-                        fetchExams();
-                      }}
+                      onClick={fetchSchedule}
                     >
                       <i className="bi bi-arrow-clockwise me-2"></i>
                       Refresh
@@ -738,7 +694,7 @@ const StudentHomePage: React.FC = () => {
             </Col>
           </Row>
 
-          {/* Filters and Search - Same as Teaching Load Committee */}
+          {/* Level and Group Selection */}
           <Row className="mb-4 g-3">
             <Col lg={3}>
               <Card className="border-0 shadow-sm h-100">
@@ -757,12 +713,29 @@ const StudentHomePage: React.FC = () => {
                 </Card.Body>
               </Card>
             </Col>
-            <Col lg={9}>
+            <Col lg={3}>
+              <Card className="border-0 shadow-sm h-100">
+                <Card.Body>
+                  <h6 className="mb-3 fw-semibold" style={{ color: '#1e3a5f' }}>Group</h6>
+                  <Form.Select
+                    value={selectedGroup}
+                    onChange={(e) => setSelectedGroup(parseInt(e.target.value))}
+                    className="border-2"
+                    style={{ borderColor: '#87CEEB', color: '#1e3a5f' }}
+                  >
+                    {getGroupsForLevel(selectedLevel).map(group => (
+                      <option key={group} value={group}>Group {group}</option>
+                    ))}
+                  </Form.Select>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col lg={6}>
               <Card className="border-0 shadow-sm h-100">
                 <Card.Body>
                   <h6 className="mb-3 fw-semibold" style={{ color: '#1e3a5f' }}>Search & Filter</h6>
                   <Row className="g-2">
-                    <Col md={4}>
+                    <Col md={6}>
                       <InputGroup>
                         <InputGroup.Text style={{ background: '#87CEEB', border: 'none' }}>
                           <i className="bi bi-search"></i>
@@ -775,18 +748,7 @@ const StudentHomePage: React.FC = () => {
                         />
                       </InputGroup>
                     </Col>
-                    <Col md={2}>
-                      <Form.Select
-                        value={selectedGroup}
-                        onChange={(e) => setSelectedGroup(parseInt(e.target.value))}
-                        style={{ borderColor: '#87CEEB' }}
-                      >
-                        {getGroupsForLevel(selectedLevel).map(group => (
-                          <option key={group} value={group}>Group {group}</option>
-                        ))}
-                      </Form.Select>
-                    </Col>
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Select
                         value={filterDay}
                         onChange={(e) => setFilterDay(e.target.value)}
@@ -798,23 +760,14 @@ const StudentHomePage: React.FC = () => {
                         ))}
                       </Form.Select>
                     </Col>
-                    <Col md={2}>
-                      <Form.Select
-                        value={activeView}
-                        onChange={(e) => setActiveView(e.target.value as 'schedule' | 'exam')}
-                        style={{ borderColor: '#87CEEB' }}
-                      >
-                        <option value="schedule">Schedule</option>
-                        <option value="exam">Exams</option>
-                      </Form.Select>
-                    </Col>
-                    <Col md={2}>
+                    <Col md={3}>
                       <Button
                         className="w-100"
                         style={{ background: '#b0c4d4', color: '#1e3a5f', border: 'none' }}
                         onClick={() => {
                           setSearchTerm('');
                           setFilterDay('');
+                          setFilterCourse('');
                         }}
                       >
                         Clear
@@ -826,55 +779,18 @@ const StudentHomePage: React.FC = () => {
             </Col>
           </Row>
 
-          {/* Main Content View */}
+          {/* Schedule View */}
           {isLoading ? (
             <div className="text-center p-5">
               <Spinner animation="border" style={{ color: '#1e3a5f' }} />
-              <p className="mt-3" style={{ color: '#1e3a5f' }}>Loading...</p>
+              <p className="mt-3" style={{ color: '#1e3a5f' }}>Loading schedule data...</p>
             </div>
           ) : (
-            <>
-              {activeView === 'schedule' && renderScheduleView()}
-              {activeView === 'exam' && renderExamView()}
-            </>
+            renderScheduleView()
           )}
 
-          {/* My Preferences */}
-          {myPreferences.length > 0 && (
-            <Card className="shadow-sm mt-4 border-0">
-              <Card.Header
-                style={{
-                  background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
-                  color: 'white',
-                  border: 'none'
-                }}
-              >
-                <h5 className="mb-0 fw-semibold">
-                  <i className="bi bi-star-fill me-2"></i>
-                  My Elective Preferences
-                </h5>
-              </Card.Header>
-              <Card.Body>
-                <ListGroup>
-                  {myPreferences.map((pref, idx) => {
-                    const course = electiveCourses.find(c => c.course_id === pref.course_id);
-                    return (
-                      <ListGroup.Item key={idx} className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <Badge bg="primary" className="me-2">Priority {pref.priority}</Badge>
-                          <strong>{course?.course_code}</strong> - {course?.course_name}
-                        </div>
-                        <small className="text-muted">{course?.department}</small>
-                      </ListGroup.Item>
-                    );
-                  })}
-                </ListGroup>
-              </Card.Body>
-            </Card>
-          )}
-
-          {/* My Feedback */}
-          {myFeedbacks.length > 0 && (
+          {/* Previous Feedbacks */}
+          {feedbacks.length > 0 && (
             <Card className="shadow-sm mt-4 border-0">
               <Card.Header
                 style={{
@@ -889,20 +805,26 @@ const StudentHomePage: React.FC = () => {
                 </h5>
               </Card.Header>
               <Card.Body>
-                {myFeedbacks.map((feedback, idx) => (
+                {feedbacks.map((feedback, idx) => (
                   <div key={idx} className="border-bottom pb-3 mb-3">
                     <div className="d-flex justify-content-between align-items-start">
                       <div>
-                        <Badge bg={feedback.feedback_target === 'schedule' ? 'primary' : 'info'} className="me-2">
-                          {feedback.feedback_type}
-                        </Badge>
-                        <Badge bg="secondary">
-                          Level {feedback.level} - Group {feedback.group_num}
-                        </Badge>
+                        {feedback.rating && (
+                          <div className="mb-2">
+                            {[...Array(5)].map((_, i) => (
+                              <i
+                                key={i}
+                                className={`bi bi-star${i < feedback.rating! ? '-fill' : ''}`}
+                                style={{ color: i < feedback.rating! ? '#ffc107' : '#dee2e6' }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        <small className="text-muted">
+                          {feedback.created_at ? new Date(feedback.created_at).toLocaleString() : 'N/A'}
+                        </small>
                       </div>
-                      <small className="text-muted">
-                        {feedback.created_at ? new Date(feedback.created_at).toLocaleString() : 'N/A'}
-                      </small>
+                      <small className="text-muted">Schedule ID: {feedback.schedule_id}</small>
                     </div>
                     <p className="mt-2 mb-0">{feedback.comment}</p>
                   </div>
@@ -913,87 +835,68 @@ const StudentHomePage: React.FC = () => {
         </Container>
       </div>
 
-      {/* Elective Survey Modal */}
-      <Modal show={showSurveyModal} onHide={() => setShowSurveyModal(false)} size="lg">
+      {/* Elective Courses Modal */}
+      <Modal show={showElectiveModal} onHide={() => setShowElectiveModal(false)} size="lg">
         <Modal.Header closeButton style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', border: 'none' }} className="text-white">
           <Modal.Title className="fw-semibold">
-            <i className="bi bi-card-checklist me-2"></i>
-            Elective Course Preferences Survey
+            <i className="bi bi-book me-2"></i>
+            Select Elective Courses
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Alert variant="info" className="mb-3">
-            <i className="bi bi-info-circle me-2"></i>
-            Select your preferred elective courses and assign priority (1 = highest priority)
-          </Alert>
-          {electiveCourses.length === 0 ? (
-            <div className="text-center p-4">
-              <p className="text-muted">No elective courses available at this time</p>
-            </div>
-          ) : (
-            <div>
-              {electiveCourses.map(course => (
-                <Card key={course.course_id} className="mb-3">
-                  <Card.Body>
-                    <Row className="align-items-center">
-                      <Col md={8}>
-                        <h6 className="mb-1 fw-semibold">{course.course_code}</h6>
-                        <p className="mb-1 small">{course.course_name}</p>
-                        <small className="text-muted">
-                          <Badge bg="secondary">{course.department}</Badge>
-                          <span className="ms-2">{course.available_sections} section(s) available</span>
-                        </small>
-                      </Col>
-                      <Col md={4}>
-                        <Form.Label className="small fw-semibold">Priority</Form.Label>
-                        <Form.Select
-                          size="sm"
-                          value={selectedElectives[course.course_id] || ''}
-                          onChange={(e) => handleElectiveSelection(course.course_id, parseInt(e.target.value))}
-                          style={{ borderColor: '#87CEEB' }}
-                        >
-                          <option value="">Not Selected</option>
-                          <option value="1">1 (Highest)</option>
-                          <option value="2">2</option>
-                          <option value="3">3</option>
-                          <option value="4">4</option>
-                          <option value="5">5 (Lowest)</option>
-                        </Form.Select>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              ))}
+          <p className="text-muted mb-3">
+            Select your preferred elective courses for Level {selectedLevel}. You can choose multiple courses.
+          </p>
+          <ListGroup>
+            {electiveCourses.map((course) => (
+              <ListGroup.Item key={course.course_code} className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="fw-bold">{course.course_code}</div>
+                  <div className="text-muted small">{course.course_name}</div>
+                  <div className="text-muted small">
+                    {course.credits} credits • {course.lecture_hours}L + {course.tutorial_hours}T + {course.lab_hours}Lab
+                  </div>
+                </div>
+                <Form.Check
+                  type="checkbox"
+                  checked={selectedElectives.includes(course.course_code)}
+                  onChange={(e) => handleElectiveSelection(course.course_code, e.target.checked)}
+                />
+              </ListGroup.Item>
+            ))}
+          </ListGroup>
+          {electiveCourses.length === 0 && (
+            <div className="text-center py-4">
+              <p className="text-muted">No elective courses available for Level {selectedLevel}</p>
             </div>
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowSurveyModal(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowElectiveModal(false)}
+          >
             Cancel
           </Button>
           <Button
             style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', border: 'none' }}
-            onClick={handleSubmitPreferences}
-            disabled={isLoading || Object.keys(selectedElectives).length === 0}
+            onClick={handleSubmitElectives}
+            disabled={isSubmittingElectives || selectedElectives.length === 0}
           >
-            {isLoading ? 'Submitting...' : 'Submit Preferences'}
+            {isSubmittingElectives ? 'Submitting...' : `Submit ${selectedElectives.length} Electives`}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Feedback Modal */}
+      {/* Feedback Modal - Same as Teaching Load Committee */}
       <Modal show={showFeedbackModal} onHide={() => setShowFeedbackModal(false)} size="lg">
         <Modal.Header closeButton style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', border: 'none' }} className="text-white">
           <Modal.Title className="fw-semibold">
             <i className="bi bi-chat-dots me-2"></i>
-            Submit Feedback on {feedbackTarget === 'schedule' ? 'Schedule' : 'Exam Timetable'}
+            Submit Schedule Feedback
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Alert variant="info" className="mb-3">
-            <i className="bi bi-info-circle me-2"></i>
-            You are submitting feedback for Level {selectedLevel}, Group {selectedGroup}
-          </Alert>
           <Form>
             <Form.Group className="mb-3">
               <Form.Label className="fw-semibold">Feedback Type</Form.Label>
@@ -1002,25 +905,31 @@ const StudentHomePage: React.FC = () => {
                 onChange={(e) => setFeedbackType(e.target.value)}
                 style={{ borderColor: '#87CEEB' }}
               >
-                {feedbackTarget === 'schedule' ? (
-                  <>
-                    <option value="schedule">General Schedule Feedback</option>
-                    <option value="conflict">Time Conflict</option>
-                    <option value="room">Room Location</option>
-                    <option value="instructor">Instructor</option>
-                    <option value="time_slot">Time Slot Issue</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="exam">General Exam Feedback</option>
-                    <option value="exam_conflict">Exam Conflict</option>
-                    <option value="exam_date">Exam Date Issue</option>
-                    <option value="exam_time">Exam Time Issue</option>
-                    <option value="exam_room">Exam Room Issue</option>
-                  </>
-                )}
+                <option value="general">General Feedback</option>
+                <option value="conflict">Schedule Conflict</option>
+                <option value="teaching_load">Teaching Load Concern</option>
+                <option value="room_assignment">Room Assignment</option>
+                <option value="time_slot">Time Slot Issue</option>
                 <option value="other">Other</option>
               </Form.Select>
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label className="fw-semibold">Rating (1-5 stars)</Form.Label>
+              <div className="d-flex align-items-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <i
+                    key={star}
+                    className={`bi bi-star${star <= feedbackRating ? '-fill' : ''} me-1`}
+                    style={{ 
+                      color: star <= feedbackRating ? '#ffc107' : '#dee2e6',
+                      fontSize: '1.5rem',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setFeedbackRating(star)}
+                  />
+                ))}
+                <span className="ms-2 text-muted">({feedbackRating}/5)</span>
+              </div>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label className="fw-semibold">Your Feedback</Form.Label>
@@ -1029,17 +938,20 @@ const StudentHomePage: React.FC = () => {
                 rows={6}
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder={`Share your thoughts about the ${feedbackTarget === 'schedule' ? 'schedule' : 'exam timetable'}, any conflicts you've noticed, or suggestions for improvement...`}
+                placeholder="Provide detailed feedback or suggestions for the schedule..."
                 style={{ borderColor: '#87CEEB' }}
               />
               <Form.Text className="text-muted">
-                Your feedback helps us improve the {feedbackTarget === 'schedule' ? 'scheduling' : 'exam scheduling'} process for everyone.
+                Be specific about the issues you've identified and provide constructive suggestions.
               </Form.Text>
             </Form.Group>
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowFeedbackModal(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowFeedbackModal(false)}
+          >
             Cancel
           </Button>
           <Button
