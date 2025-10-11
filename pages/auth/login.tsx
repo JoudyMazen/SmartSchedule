@@ -222,22 +222,6 @@ const LoginPage: React.FC = () => {
                         Sign up
                       </a>
                     </p>
-                    
-                    {/* Quick Access Button */}
-                    <div className="mt-3 pt-3 border-top">
-                      <Button
-                        variant="outline-primary"
-                        onClick={() => router.push('/scheduleCommittee/scheduleCommitteeHomePage')}
-                        className="px-4 py-2"
-                        style={{ borderRadius: '8px' }}
-                      >
-                        <i className="fas fa-rocket me-2"></i>
-                        Quick Access - Scheduling Committee
-                      </Button>
-                      <p className="text-muted small mt-2 mb-0">
-                        Skip authentication for testing
-                      </p>
-                    </div>
                   </div>
                 </Card.Body>
               </Card>
