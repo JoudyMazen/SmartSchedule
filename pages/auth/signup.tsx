@@ -11,7 +11,7 @@ interface FormData {
   phone: string;
   password: string;
   confirmPassword: string;
-  role: "student" | "faculty" | "committee";
+  role: "student" | "faculty" | "committee" | "teaching_load_committee";
 }
 
 interface Errors {
@@ -119,6 +119,8 @@ const SignupPage: React.FC = () => {
     switch (role) {
       case "committee":
         return "/scheduleCommittee/scheduleCommitteeHomePage";
+      case "teaching_load_committee":
+        return "/teachingLoadCommittee/teachingLoadCommitteeHomePage";
       case "faculty":
         return "/facultyHomePage";
       case "student":
@@ -149,7 +151,9 @@ const SignupPage: React.FC = () => {
           email: formData.email.toLowerCase().trim(),
           phone: formData.phone.replace(/\D/g, ''),
           password: formData.password,
-          role: formData.role === "committee" ? "scheduling_committee" : formData.role,
+          role: formData.role === "committee" ? "scheduling_committee" : 
+                formData.role === "teaching_load_committee" ? "teaching_load_committee" : 
+                formData.role,
         }),
       });
 
@@ -283,7 +287,7 @@ const SignupPage: React.FC = () => {
                         Select Your Role *
                       </Form.Label>
                       <Row className="g-2">
-                        <Col xs={4}>
+                        <Col xs={6} md={3}>
                           <RoleOption
                             value="student"
                             icon="fas fa-graduation-cap"
@@ -293,7 +297,7 @@ const SignupPage: React.FC = () => {
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
                         </Col>
-                        <Col xs={4}>
+                        <Col xs={6} md={3}>
                           <RoleOption
                             value="faculty"
                             icon="fas fa-chalkboard-teacher"
@@ -303,13 +307,23 @@ const SignupPage: React.FC = () => {
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
                         </Col>
-                        <Col xs={4}>
+                        <Col xs={6} md={3}>
                           <RoleOption
                             value="committee"
                             icon="fas fa-cog"
-                            label="Committee"
-                            description="Administer system"
+                            label="Schedule Committee"
+                            description="Create schedules"
                             selected={formData.role === "committee"}
+                            onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
+                          />
+                        </Col>
+                        <Col xs={6} md={3}>
+                          <RoleOption
+                            value="teaching_load_committee"
+                            icon="fas fa-clipboard-check"
+                            label="Teaching Load"
+                            description="Review teaching loads"
+                            selected={formData.role === "teaching_load_committee"}
                             onSelect={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                           />
                         </Col>

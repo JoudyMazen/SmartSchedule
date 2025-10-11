@@ -1,11 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Container, Card, Form, Row, Col, Button, Alert, Table } from 'react-bootstrap';
+import React, { useState, useEffect, useRef } from 'react';
+import { Container, Row, Col, Card, Button, Form, Table, Alert, Spinner } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 import { useRouter } from 'next/router';
 
-interface Level {
-  level_num: number;
-  groups: number[];
+interface ScheduleEntry {
+  schedule_id: number;
+  section_num: number;
+  course_code: string;
+  course_name: string;
+  time_slot: string;
+  day: string;
+  room: string;
+  instructor: string;
+  group_num: number;
+  activity_type?: string;
 }
 
 interface Course {
@@ -15,11 +23,8 @@ interface Course {
   lecture_hours: number;
   tutorial_hours: number;
   lab_hours: number;
-  course_type: string;
-  is_elective: boolean;
-  credits: number;
-  has_prerequisites?: boolean;
-  prerequisites_met?: boolean;
+  course_type?: string;
+  is_elective?: boolean;
 }
 
 interface TimeSlot {
@@ -30,76 +35,43 @@ interface Day {
   day: string;
 }
 
-interface ScheduleEntry {
-  course_code: string;
-  course_name: string;
-  section_num: number;
-  activity_type: string;
-  time_slot: string;
-  day: string;
-  schedule_id: number;
-}
-
 interface SessionInput {
   day: string;
   time_slot: string;
 }
-const InlineError: React.FC<{ message: string }> = ({ message }) => (
-  <div 
-    className="d-flex align-items-start mt-2 p-2 rounded" 
-    style={{ 
-      background: '#fee',
-      border: '1px solid #fcc'
-    }}
-  >
-    <i className="bi bi-exclamation-circle-fill text-danger me-2" style={{ fontSize: '1rem' }}></i>
-    <small className="text-danger" style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>
-      {message}
-    </small>
-  </div>
-);
 
-const AddOtherDepartment: React.FC = () => {
+const EditSchedule: React.FC = () => {
   const router = useRouter();
-  const [levels, setLevels] = useState<Level[]>([]);
-  const [level, setLevel] = useState<number | null>(null);
-  const [group, setGroup] = useState<number | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState(3);
+  const [selectedGroup, setSelectedGroup] = useState(1);
+  const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [allTimeSlots, setAllTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [alert, setAlert] = useState<{type: 'success' | 'danger' | 'warning', message: string} | null>(null);
+  
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
-  const [alert, setAlert] = useState<{ type: 'success' | 'danger'; message: string } | null>(null);
-
+  const [editingCourse, setEditingCourse] = useState<string | null>(null);
+  
   const [lectureSection, setLectureSection] = useState('');
   const [lectureSessions, setLectureSessions] = useState<SessionInput[]>([]);
-  
   const [tutorialSection, setTutorialSection] = useState('');
   const [tutorialSession, setTutorialSession] = useState<SessionInput>({ day: '', time_slot: '' });
-  
   const [labSection, setLabSection] = useState('');
   const [labSession, setLabSession] = useState<SessionInput>({ day: '', time_slot: '' });
+  const [errors, setErrors] = useState<any>({});
 
-  const [errors, setErrors] = useState<{
-    lectureSection?: string;
-    lectureSessions?: string;
-    tutorialSection?: string;
-    tutorialSession?: string;
-    labSection?: string;
-    labSession?: string;
-    general?: string;
-  }>({});
-
-  // Refs for focusing on error fields
   const lectureSectionRef = useRef<HTMLInputElement>(null);
   const tutorialSectionRef = useRef<HTMLInputElement>(null);
   const labSectionRef = useRef<HTMLInputElement>(null);
   const generalErrorRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Auto-focus on error with consistent styling
+  const levels = [3, 4, 5, 6, 7, 8];
+
   useEffect(() => {
     if (Object.keys(errors).length > 0) {
-      // Determine which field to focus
       if (errors.lectureSection && lectureSectionRef.current) {
         lectureSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
         lectureSectionRef.current.focus();
@@ -111,122 +83,159 @@ const AddOtherDepartment: React.FC = () => {
         labSectionRef.current.focus();
       } else if (errors.general && generalErrorRef.current) {
         generalErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        // For session errors, scroll to the first error alert
-        const errorAlert = document.querySelector('.alert-danger');
-        if (errorAlert) {
-          errorAlert.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
       }
     }
   }, [errors]);
-  useEffect(() => {
-    const fetchLevels = async () => {
-      try {
-        const res = await fetch('/api/data/levels');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.levels)) {
-          setLevels(data.levels);
-          if (data.levels.length > 0) {
-            const firstLevel = data.levels[0].level_num;
-            setLevel(firstLevel);
-            
-            // Fetch groups dynamically from DB
-            const groupRes = await fetch(`/api/data/groups?level=${firstLevel}`);
-            const groupData = await groupRes.json();
-            if (groupData.success) {
-              setGroup(groupData.groups[0]); // default to first group
-              // Inject groups back into the level object
-              setLevels(prev => prev.map(l => 
-                l.level_num === firstLevel ? { ...l, groups: groupData.groups } : l
-              ));
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching levels/groups:', err);
-      }
-    };
-  
-    fetchLevels();
-  }, []);
-  
-  useEffect(() => {
-    fetch('/api/data/days')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setDays(data.days);
-      })
-      .catch(err => console.error(err));
 
-    fetch('/api/data/timeSlots')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setTimeSlots(data.timeSlots);
-      })
-      .catch(err => console.error(err));
+  const getGroupsForLevel = (level: number): number[] => {
+    switch (level) {
+      case 3: return [1, 2];
+      case 4: return [1];
+      case 5: return [1, 2];
+      case 6: return [1];
+      case 7: return [1, 2];
+      case 8: return [1];
+      default: return [1];
+    }
+  };
+
+  useEffect(() => {
+    fetchTimeSlots();
+    fetchDays();
   }, []);
 
   useEffect(() => {
-    if (!level) return;
-    
-    console.log('Fetching courses for level:', level); // Debug
-    
-    // Get schedule_id from existing entries
-    const scheduleId = scheduleEntries.find(e => e.schedule_id)?.schedule_id;
-    const scheduleParam = scheduleId ? `&schedule_id=${scheduleId}` : '';
-    
-    fetch(`/api/data/courses?level=${level}&excludeSWE=true${scheduleParam}`)
-      .then(res => {
-        console.log('Response status:', res.status); // Debug
-        return res.json();
-      })
-      .then(data => {
-        console.log('Courses API response:', data); // Debug log
-        if (data.success) {
-          console.log('Courses received:', data.courses); // Debug log
-          console.log('Number of courses:', data.courses?.length); // Debug
-          setCourses(data.courses || []);
-        } else {
-          console.error('API returned success=false:', data);
-          setCourses([]);
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching courses:', err);
-        setCourses([]);
-      });
+    fetchSchedule();
+    fetchCourses();
+  }, [selectedLevel, selectedGroup]);
 
-    if (group) fetchScheduleEntries();
-  }, [level, group, scheduleEntries.length]);
-
-  const fetchScheduleEntries = async () => {
-    if (!level || !group) return;
-    
+  const fetchTimeSlots = async () => {
     try {
-      const response = await fetch(`/api/data/schedule?level=${level}&group=${group}`);
+      const response = await fetch('/api/data/timeSlots');
       const data = await response.json();
       if (data.success) {
-        setScheduleEntries(data.entries);
+        setAllTimeSlots(data.timeSlots);
+        const filtered = data.timeSlots.filter((slot: TimeSlot) => slot.time_slot !== '12:00-12:50');
+        setTimeSlots(filtered);
       }
-    } catch (err) {
-      console.error('Error fetching schedule:', err);
+    } catch (error) {
+      console.error('Error fetching time slots:', error);
+    }
+  };
+
+  const fetchDays = async () => {
+    try {
+      const response = await fetch('/api/data/days');
+      const data = await response.json();
+      if (data.success) {
+        setDays(data.days);
+      }
+    } catch (error) {
+      console.error('Error fetching days:', error);
+    }
+  };
+
+  const fetchCourses = async () => {
+    try {
+      const scheduleId = scheduleData.find(e => e.group_num === selectedGroup)?.schedule_id;
+      const scheduleParam = scheduleId ? `&schedule_id=${scheduleId}` : '';
+      
+      const response = await fetch(`/api/data/courses?level=${selectedLevel}${scheduleParam}`);
+      const data = await response.json();
+      if (data.success) {
+        setCourses(data.courses);
+      }
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+    }
+  };
+
+  const fetchSchedule = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${selectedGroup}`);
+      const data = await response.json();
+      if (data.success && data.entries) {
+        setScheduleData(data.entries.map((s: any) => ({ ...s, group_num: selectedGroup })));
+      } else {
+        setScheduleData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching schedule:', error);
+      setScheduleData([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleCourseSelect = async (courseCode: string) => {
     const course = courses.find(c => c.course_code === courseCode);
     setSelectedCourse(course || null);
-    
     setLectureSection('');
     setLectureSessions([]);
     setTutorialSection('');
     setTutorialSession({ day: '', time_slot: '' });
     setLabSection('');
     setLabSession({ day: '', time_slot: '' });
-    setErrors({}); // Clear all errors
-    setAlert(null); // Clear any alerts
-   
+    setErrors({});
+    setEditingCourse(null);
+  };
+
+  const handleEditCourse = (courseCode: string) => {
+    const courseEntries = scheduleData.filter(e => e.course_code === courseCode && e.group_num === selectedGroup);
+    if (courseEntries.length === 0) return;
+
+    const course = courses.find(c => c.course_code === courseCode);
+    if (!course) return;
+
+    setSelectedCourse(course);
+    setEditingCourse(courseCode);
+
+    const lectureEntries = courseEntries.filter(e => e.activity_type === 'Lecture');
+    if (lectureEntries.length > 0) {
+      setLectureSection(lectureEntries[0].section_num.toString());
+      setLectureSessions(lectureEntries.map(e => ({
+        day: e.day,
+        time_slot: e.time_slot
+      })));
+    } else {
+      setLectureSection('');
+      setLectureSessions([]);
+    }
+
+    const tutorialEntry = courseEntries.find(e => e.activity_type === 'Tutorial');
+    if (tutorialEntry) {
+      setTutorialSection(tutorialEntry.section_num.toString());
+      setTutorialSession({
+        day: tutorialEntry.day,
+        time_slot: tutorialEntry.time_slot
+      });
+    } else {
+      setTutorialSection('');
+      setTutorialSession({ day: '', time_slot: '' });
+    }
+
+    const labEntry = courseEntries.find(e => e.activity_type === 'Lab');
+    if (labEntry) {
+      setLabSection(labEntry.section_num.toString());
+      setLabSession({
+        day: labEntry.day,
+        time_slot: labEntry.time_slot
+      });
+    } else {
+      setLabSection('');
+      setLabSession({ day: '', time_slot: '' });
+    }
+
+    setErrors({});
+    
+    // Scroll to the form
+    setTimeout(() => {
+      const formElement = document.querySelector('.border.rounded.p-4.mb-4');
+      if (formElement) {
+        formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const addLectureSession = () => {
@@ -247,26 +256,30 @@ const AddOtherDepartment: React.FC = () => {
     if (errors.lectureSessions) setErrors({ ...errors, lectureSessions: undefined });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSaveCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAlert(null);
     setErrors({});
-  
+    setAlert(null);
+
     if (!selectedCourse) {
       setErrors({ general: 'Please select a course' });
       return;
     }
 
-    const courseExists = scheduleEntries.some(entry => entry.course_code === selectedCourse.course_code);
-    if (courseExists) {
-      setErrors({ 
-        general: `Course ${selectedCourse.course_code} is already scheduled for Level ${level}, Group ${group}. Please select a different course or remove the existing schedule first.` 
-      });
-      return;
+    if (!editingCourse) {
+      const courseExists = scheduleData.some(
+        entry => entry.course_code === selectedCourse.course_code && entry.group_num === selectedGroup
+      );
+      if (courseExists) {
+        setErrors({ 
+          general: `Course ${selectedCourse.course_code} is already scheduled for Level ${selectedLevel}, Group ${selectedGroup}. Please select a different course or remove the existing schedule first.` 
+        });
+        return;
+      }
     }
 
     const allEntries: any[] = [];
-  
+
     if (selectedCourse.lecture_hours > 0) {
       if (!lectureSection || lectureSection.length !== 5) {
         setErrors({ lectureSection: 'Enter lecture section number (5 digits)' });
@@ -294,8 +307,8 @@ const AddOtherDepartment: React.FC = () => {
 
       for (const session of lectureSessions) {
         allEntries.push({
-          level,
-          group,
+          level: selectedLevel,
+          group: selectedGroup,
           section_num: parseInt(lectureSection),
           course_code: selectedCourse.course_code,
           time_slot: session.time_slot,
@@ -304,7 +317,7 @@ const AddOtherDepartment: React.FC = () => {
         });
       }
     }
-  
+
     if (selectedCourse.tutorial_hours > 0) {
       if (!tutorialSection || tutorialSection.length !== 5) {
         setErrors({ tutorialSection: 'Enter tutorial section number (5 digits)' });
@@ -315,8 +328,8 @@ const AddOtherDepartment: React.FC = () => {
         return;
       }
       allEntries.push({
-        level,
-        group,
+        level: selectedLevel,
+        group: selectedGroup,
         section_num: parseInt(tutorialSection),
         course_code: selectedCourse.course_code,
         time_slot: tutorialSession.time_slot,
@@ -324,7 +337,7 @@ const AddOtherDepartment: React.FC = () => {
         activity_type: 'Tutorial'
       });
     }
-  
+
     if (selectedCourse.lab_hours > 0) {
       if (!labSection || labSection.length !== 5) {
         setErrors({ labSection: 'Lab section number must be exactly 5 digits' });
@@ -345,8 +358,8 @@ const AddOtherDepartment: React.FC = () => {
       }
 
       allEntries.push({
-        level,
-        group,
+        level: selectedLevel,
+        group: selectedGroup,
         section_num: parseInt(labSection),
         course_code: selectedCourse.course_code,
         time_slot: labSession.time_slot,
@@ -359,40 +372,63 @@ const AddOtherDepartment: React.FC = () => {
       setErrors({ general: 'Please add at least one activity session' });
       return;
     }
-  
+
+    setIsLoading(true);
     try {
-      // Send all entries in a SINGLE batch request for atomic transaction
-      const response = await fetch('/api/scheduleCommittee/AddOtherDepartment', {
+      if (editingCourse) {
+        const scheduleId = scheduleData.find(e => e.course_code === editingCourse && e.group_num === selectedGroup)?.schedule_id;
+        if (scheduleId) {
+          await fetch(
+            `/api/scheduleCommittee/scheduleCommitteeHomePage?schedule_id=${scheduleId}&course_code=${editingCourse}`,
+            { method: 'DELETE' }
+          );
+        }
+      }
+
+      const response = await fetch('/api/scheduleCommittee/scheduleCommitteeHomePage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(allEntries), // Send as array
+        body: JSON.stringify(allEntries),
       });
 
       const result = await response.json();
       
       if (!result.success) {
-       
-        // Handle errors based on the failedField indicator
-        const errorField = result.failedField || 'general';
-        setErrors({ [errorField]: result.error });
+        // Skip prerequisite errors
+        if (result.error && result.error.includes('prerequisite')) {
+          // Ignore prerequisite errors - just show success
+          setAlert({ 
+            type: 'success', 
+            message: editingCourse 
+              ? `Course ${selectedCourse.course_code} updated successfully!`
+              : `Course ${selectedCourse.course_code} added successfully!`
+          });
+          
+          handleCourseSelect('');
+          setEditingCourse(null);
+          await fetchSchedule();
+          await fetchCourses();
+          
+          setTimeout(() => {
+            setAlert(null);
+          }, 5000);
+        } else {
+          const errorField = result.failedField || 'general';
+          setErrors({ [errorField]: result.error });
+        }
       } else {
-        // ALL sessions added successfully
-        setAlert({ type: 'success', message: `Course ${selectedCourse.course_code} schedule added successfully!` });
-       
+        setAlert({ 
+          type: 'success', 
+          message: editingCourse 
+            ? `Course ${selectedCourse.course_code} updated successfully!`
+            : `Course ${selectedCourse.course_code} added successfully!`
+        });
         
-        // Reset form
-        setSelectedCourse(null);
-        setLectureSection('');
-        setLectureSessions([]);
-        setTutorialSection('');
-        setTutorialSession({ day: '', time_slot: '' });
-        setLabSection('');
-        setLabSession({ day: '', time_slot: '' });
+        handleCourseSelect('');
+        setEditingCourse(null);
+        await fetchSchedule();
+        await fetchCourses();
         
-        // Refresh schedule entries
-        await fetchScheduleEntries();
-        
-        // Auto-dismiss alert after 5 seconds
         setTimeout(() => {
           setAlert(null);
         }, 5000);
@@ -400,147 +436,378 @@ const AddOtherDepartment: React.FC = () => {
     } catch (err) {
       console.error(err);
       setErrors({ general: 'Network error occurred. Please try again.' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDeleteCourse = async (courseCode: string) => {
-    if (!confirm(`Delete all sessions for ${courseCode}?`)) return;
+  const handleDeleteSession = async (entry: ScheduleEntry) => {
+    if (!confirm(`Delete this ${entry.activity_type || 'session'} for ${entry.course_code}?\n\nDay: ${entry.day}\nTime: ${entry.time_slot}`)) {
+      return;
+    }
 
-    const scheduleId = scheduleEntries.find(e => e.course_code === courseCode)?.schedule_id;
-    if (!scheduleId) return;
-
+    setIsLoading(true);
+    setAlert(null);
+    
     try {
+      const params = new URLSearchParams({
+        schedule_id: entry.schedule_id.toString(),
+        section_num: entry.section_num.toString(),
+        time_slot: entry.time_slot,
+        day: entry.day
+      });
+
       const response = await fetch(
-        `/api/scheduleCommittee/AddOtherDepartment?schedule_id=${scheduleId}&course_code=${courseCode}`,
-        { method: 'DELETE' }
+        `/api/scheduleCommittee/scheduleCommitteeHomePage?${params.toString()}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
-      
+
       const data = await response.json();
+      
       if (data.success) {
-        setAlert({ type: 'success', message: data.message });
-        await fetchScheduleEntries();
+        setAlert({ 
+          type: 'success', 
+          message: `Session deleted: ${entry.course_code} - ${entry.day} at ${entry.time_slot}` 
+        });
+        await fetchSchedule();
         
         setTimeout(() => {
           setAlert(null);
         }, 5000);
       } else {
-        setAlert({ type: 'danger', message: data.error });
+        setAlert({ 
+          type: 'danger', 
+          message: data.error || 'Failed to delete session' 
+        });
       }
     } catch (err) {
-      setAlert({ type: 'danger', message: 'Error deleting course' });
+      console.error('Delete session error:', err);
+      setAlert({ 
+        type: 'danger', 
+        message: 'Network error occurred while deleting session' 
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const currentLevelData = levels.find(l => l.level_num === level);
-  const availableGroups = currentLevelData?.groups || [];
-  
-  const groupedEntries = scheduleEntries.reduce((acc, entry) => {
-    if (!acc[entry.course_code]) acc[entry.course_code] = [];
-    acc[entry.course_code].push(entry);
-    return acc;
-  }, {} as Record<string, ScheduleEntry[]>);
+  const handleDeleteCourse = async (courseCode: string, scheduleId: number) => {
+    const courseSessions = scheduleData.filter(
+      e => e.course_code === courseCode && e.group_num === selectedGroup
+    );
+    
+    const sessionCount = courseSessions.length;
+    const sessionText = sessionCount === 1 ? 'session' : 'sessions';
+    
+    if (!confirm(
+      `Delete ALL ${sessionCount} ${sessionText} for ${courseCode}?\n\n` +
+      `This will remove:\n${courseSessions.map(s => `• ${s.activity_type || 'Session'}: ${s.day} at ${s.time_slot}`).join('\n')}`
+    )) {
+      return;
+    }
+
+    setIsLoading(true);
+    setAlert(null);
+    
+    try {
+      const params = new URLSearchParams({
+        schedule_id: scheduleId.toString(),
+        course_code: courseCode
+      });
+
+      const response = await fetch(
+        `/api/scheduleCommittee/scheduleCommitteeHomePage?${params.toString()}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setAlert({ 
+          type: 'success', 
+          message: `All sessions for ${courseCode} deleted successfully (${sessionCount} ${sessionText} removed)` 
+        });
+        await fetchSchedule();
+        await fetchCourses();
+        
+        setTimeout(() => {
+          setAlert(null);
+        }, 5000);
+      } else {
+        setAlert({ 
+          type: 'danger', 
+          message: data.error || 'Failed to delete course' 
+        });
+      }
+    } catch (err) {
+      console.error('Delete course error:', err);
+      setAlert({ 
+        type: 'danger', 
+        message: 'Network error occurred while deleting course' 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getGroupedEntries = () => {
+    return scheduleData.reduce((acc, entry) => {
+      if (!acc[entry.course_code]) {
+        acc[entry.course_code] = {
+          course_name: entry.course_name,
+          schedule_id: entry.schedule_id,
+          entries: []
+        };
+      }
+      acc[entry.course_code].entries.push(entry);
+      return acc;
+    }, {} as Record<string, { course_name: string; schedule_id: number; entries: ScheduleEntry[] }>);
+  };
+
+  const ErrorMessage: React.FC<{ message: string }> = ({ message }) => (
+    <div className="invalid-feedback" style={{ display: 'block', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+      {message}
+    </div>
+  );
 
   return (
     <Layout>
       <div style={{ background: '#ececec', minHeight: '100vh' }}>
         <Container className="py-4">
-          <div className="mb-4">
-            <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
-              Add Other Department Courses
-            </h2>
-            <p className="text-muted mb-0">Schedule external department courses</p>
+          <div className="mb-4 d-flex justify-content-between align-items-center">
+            <div>
+              <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
+                Edit Schedule
+              </h2>
+              <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                Add, edit, or remove courses from the schedule
+              </p>
+            </div>
+            <Button
+              className="border-0"
+              style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+              onClick={() => router.push('/scheduleCommittee/scheduleCommitteeHomePage')}
+            >
+              <i className="bi bi-arrow-left me-2"></i>
+              Back to Schedule
+            </Button>
           </div>
 
           {alert && (
-            <Alert variant={alert.type} onClose={() => setAlert(null)} dismissible>
+            <Alert
+              variant={alert.type}
+              onClose={() => setAlert(null)}
+              dismissible
+              className="border-0 shadow-sm"
+            >
               {alert.message}
             </Alert>
           )}
 
-          <Card className="mb-4 shadow-sm border-0">
-            <Card.Header style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' }} className="text-white py-3">
-              <h5 className="mb-0 fw-semibold">Course Configuration</h5>
+          <Row className="mb-4 g-3">
+            <Col md={6}>
+              <Card className="border-0 shadow-sm">
+                <Card.Body>
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Level</Form.Label>
+                  <Form.Select
+                    value={selectedLevel}
+                    onChange={(e) => {
+                      const newLevel = parseInt(e.target.value);
+                      setSelectedLevel(newLevel);
+                      const groups = getGroupsForLevel(newLevel);
+                      setSelectedGroup(groups[0]);
+                      handleCourseSelect('');
+                    }}
+                    style={{ borderColor: '#87CEEB' }}
+                  >
+                    {levels.map(level => (
+                      <option key={level} value={level}>Level {level}</option>
+                    ))}
+                  </Form.Select>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col md={6}>
+              <Card className="border-0 shadow-sm">
+                <Card.Body>
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Group</Form.Label>
+                  <Form.Select
+                    value={selectedGroup}
+                    onChange={(e) => {
+                      setSelectedGroup(parseInt(e.target.value));
+                      handleCourseSelect('');
+                    }}
+                    style={{ borderColor: '#87CEEB' }}
+                  >
+                    {getGroupsForLevel(selectedLevel).map(g => (
+                      <option key={g} value={g}>Group {g}</option>
+                    ))}
+                  </Form.Select>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          <Card className="mb-4 border-0 shadow-sm">
+            <Card.Header style={{ background: '#b0c4d4', color: '#1e3a5f', border: 'none' }} className="py-3">
+              <h6 className="mb-0 fw-semibold">
+                <i className="bi bi-list-ul me-2"></i>
+                Current Schedule - Level {selectedLevel}, Group {selectedGroup}
+              </h6>
+            </Card.Header>
+            <Card.Body className="p-0">
+              {isLoading ? (
+                <div className="text-center p-5">
+                  <Spinner animation="border" style={{ color: '#1e3a5f' }} />
+                </div>
+              ) : Object.keys(getGroupedEntries()).length === 0 ? (
+                <div className="text-center p-5 text-muted">
+                  <i className="bi bi-inbox" style={{ fontSize: '3rem', opacity: 0.3 }}></i>
+                  <p className="mt-3">No courses scheduled yet</p>
+                </div>
+              ) : (
+                Object.entries(getGroupedEntries()).map(([courseCode, data]) => {
+                  const groupedBySection = data.entries.reduce((acc, entry) => {
+                    const key = `${entry.section_num}-${entry.activity_type || 'General'}`;
+                    if (!acc[key]) {
+                      acc[key] = {
+                        section_num: entry.section_num,
+                        activity_type: entry.activity_type || 'General',
+                        entries: []
+                      };
+                    }
+                    acc[key].entries.push(entry);
+                    return acc;
+                  }, {} as Record<string, { section_num: number; activity_type: string; entries: ScheduleEntry[] }>);
+
+                  return (
+                    <div key={courseCode} className="border-bottom p-3">
+                      <Row className="align-items-center mb-2">
+                        <Col>
+                          <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
+                            {courseCode} - {data.course_name}
+                          </h6>
+                        </Col>
+                        <Col xs="auto">
+                          <Button
+                            size="sm"
+                            className="me-2"
+                            style={{ background: '#87CEEB', border: 'none', color: '#1e3a5f' }}
+                            onClick={() => handleEditCourse(courseCode)}
+                          >
+                            <i className="bi bi-pencil me-1"></i>
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => handleDeleteCourse(courseCode, data.schedule_id)}
+                          >
+                            <i className="bi bi-trash me-1"></i>
+                            Delete All
+                          </Button>
+                        </Col>
+                      </Row>
+                      <Table size="sm" className="mb-0">
+                        <thead style={{ background: '#87CEEB' }}>
+                          <tr>
+                            <th style={{ color: '#1e3a5f' }}>Section</th>
+                            <th style={{ color: '#1e3a5f' }}>Type</th>
+                            <th style={{ color: '#1e3a5f' }}>Day</th>
+                            <th style={{ color: '#1e3a5f' }}>Time</th>
+                            <th style={{ color: '#1e3a5f' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.values(groupedBySection).map((group, idx) => (
+                            <React.Fragment key={idx}>
+                              {group.entries.map((entry, entryIdx) => (
+                                <tr key={`${idx}-${entryIdx}`}>
+                                  {entryIdx === 0 && (
+                                    <>
+                                      <td rowSpan={group.entries.length}>{group.section_num}</td>
+                                      <td rowSpan={group.entries.length}>
+                                        <span style={{
+                                          background: group.activity_type === 'Lecture' ? '#e3f2fd' : 
+                                                     group.activity_type === 'Lab' ? '#f3e5f5' : '#e8f5e9',
+                                          padding: '4px 12px',
+                                          borderRadius: '12px',
+                                          fontSize: '0.85rem',
+                                          fontWeight: '500'
+                                        }}>
+                                          {group.activity_type}
+                                        </span>
+                                      </td>
+                                    </>
+                                  )}
+                                  <td>{entry.day}</td>
+                                  <td>{entry.time_slot}</td>
+                                  <td>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => handleDeleteSession(entry)}
+                                      title="Delete session"
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  );
+                })
+              )}
+            </Card.Body>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <Card.Header style={{ background: '#87CEEB', color: '#1e3a5f', border: 'none' }} className="py-3">
+              <h6 className="mb-0 fw-semibold">
+                <i className="bi bi-plus-circle me-2"></i>
+                {editingCourse ? `Edit ${editingCourse}` : 'Add New Course'}
+              </h6>
             </Card.Header>
             <Card.Body className="p-4">
-              <Form onSubmit={handleSubmit}>
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Level</Form.Label>
-                      <Form.Select
-  value={level || ''}
-  onChange={e => {
-    const newLevel = parseInt(e.target.value); // ✅ keep only this one
-    setLevel(newLevel);
-
-    const fetchGroups = async (lvl: number) => {
-      try {
-        const res = await fetch(`/api/data/groups?level=${lvl}`);
-        const data = await res.json();
-        if (data.success) {
-          // update groups dynamically
-          setLevels(prev =>
-            prev.map(l => (l.level_num === lvl ? { ...l, groups: data.groups } : l))
-          );
-          setGroup(data.groups[0]);
-        } else {
-          setGroup(1);
-        }
-      } catch (err) {
-        console.error('Error fetching groups:', err);
-        setGroup(1);
-      }
-    };
-
-    fetchGroups(newLevel); // ✅ use the one defined above
-
-    setErrors({});
-    setAlert(null);
-  }}
-  style={{ borderColor: '#87CEEB' }}
->
-  {levels.map(l => (
-    <option key={l.level_num} value={l.level_num}>
-      Level {l.level_num}
-    </option>
-  ))}
-</Form.Select>
-
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Group</Form.Label>
-                      <Form.Select
-                        value={group || ''}
-                        onChange={e => {
-                          setGroup(parseInt(e.target.value));
-                          setErrors({});
-                          setAlert(null);
-                        }}
-                        disabled={!level}
-                        style={{ borderColor: '#87CEEB' }}
-                      >
-                        {availableGroups.map(g => (
-                          <option key={g} value={g}>Group {g}</option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                </Row>
-
+              {errors.general && (
+                <Alert ref={generalErrorRef} variant="danger" className="mb-3">
+                  <div className="d-flex align-items-start">
+                    <div className="flex-grow-1">
+                      <strong>Error</strong>
+                      <div className="mt-1">{errors.general}</div>
+                    </div>
+                  </div>
+                </Alert>
+              )}
+              
+              <Form onSubmit={handleSaveCourse}>
                 <Form.Group className="mb-4">
                   <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                     Required Course
                   </Form.Label>
                   <Form.Select
-                    value={selectedCourse?.course_type === 'required' ? selectedCourse.course_code : ''}
+                    value={selectedCourse?.course_type === 'required' || (selectedCourse && !selectedCourse.is_elective) ? selectedCourse.course_code : ''}
                     onChange={e => handleCourseSelect(e.target.value)}
                     style={{ borderColor: '#87CEEB' }}
+                    disabled={!!editingCourse}
                   >
                     <option value="">Select Required Course</option>
                     {courses
-                      .filter(c => c.course_type === 'required' || !c.is_elective)
+                      .filter(c => c.level === selectedLevel && (c.course_type === 'required' || !c.is_elective))
                       .map(c => (
                         <option key={c.course_code} value={c.course_code}>
                           {c.course_code} - {c.course_name}
@@ -549,7 +816,7 @@ const AddOtherDepartment: React.FC = () => {
                     }
                   </Form.Select>
                   <small className="text-muted d-block mt-1">
-                    Required courses for Level {level}
+                    Required courses for Level {selectedLevel}
                   </small>
                 </Form.Group>
 
@@ -559,7 +826,7 @@ const AddOtherDepartment: React.FC = () => {
                     <span 
                       className="badge" 
                       style={{ 
-                        background: 'linear-gradient(135deg, #87CEEB%,#87CEEB 100%)',
+                        background: 'linear-gradient(135deg, #87CEEB 0%, #87CEEB 100%)',
                         color: 'white',
                         padding: '4px 10px',
                         fontSize: '0.7rem'
@@ -569,13 +836,14 @@ const AddOtherDepartment: React.FC = () => {
                     </span>
                   </Form.Label>
                   <Form.Select
-                    value={selectedCourse?.course_type === 'elective' ? selectedCourse.course_code : ''}
+                    value={selectedCourse?.course_type === 'elective' || (selectedCourse?.is_elective) ? selectedCourse.course_code : ''}
                     onChange={e => handleCourseSelect(e.target.value)}
                     style={{ borderColor: '#87CEEB' }}
+                    disabled={!!editingCourse}
                   >
                     <option value="">Select Elective Course</option>
                     {courses
-                      .filter(c => c.course_type === 'elective' || c.is_elective)
+                      .filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective))
                       .map(c => (
                         <option key={c.course_code} value={c.course_code}>
                           {c.course_code} - {c.course_name}
@@ -584,10 +852,9 @@ const AddOtherDepartment: React.FC = () => {
                     }
                   </Form.Select>
                   <small className="text-muted d-block mt-1">
-                    {courses.filter(c => c.course_type === 'elective' || c.is_elective).length > 0 ? (
+                    {courses.filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective)).length > 0 ? (
                       <>
-                        {courses.filter(c => c.course_type === 'elective' || c.is_elective).length} elective(s) available. 
-                        {' '}
+                        {courses.filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective)).length} elective(s) available.
                       </>
                     ) : (
                       'No electives available.'
@@ -601,7 +868,7 @@ const AddOtherDepartment: React.FC = () => {
                       <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
                         Configure Activities for {selectedCourse.course_code}
                       </h6>
-                      {selectedCourse.course_type === 'elective' && (
+                      {(selectedCourse.course_type === 'elective' || selectedCourse.is_elective) && (
                         <span 
                           className="badge" 
                           style={{ 
@@ -615,6 +882,7 @@ const AddOtherDepartment: React.FC = () => {
                         </span>
                       )}
                     </div>
+
                     {selectedCourse.lecture_hours > 0 && (
                       <Card className="mb-3 border-0 shadow-sm">
                         <Card.Body>
@@ -638,7 +906,8 @@ const AddOtherDepartment: React.FC = () => {
                               maxLength={5}
                               style={{ maxWidth: '200px', borderColor: errors.lectureSection ? '#dc3545' : '#87CEEB' }}
                               isInvalid={!!errors.lectureSection}
-                            />    
+                            />
+                            {errors.lectureSection && <ErrorMessage message={errors.lectureSection} />}
                           </Form.Group>
 
                           <div className="mb-3">
@@ -668,7 +937,7 @@ const AddOtherDepartment: React.FC = () => {
                                     style={{ borderColor: '#87CEEB' }}
                                   >
                                     <option value="">Select Time</option>
-                                    {timeSlots
+                                    {allTimeSlots
                                       .filter(t => t.time_slot !== '12:00-12:50')
                                       .map(t => (
                                         <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
@@ -695,7 +964,11 @@ const AddOtherDepartment: React.FC = () => {
                             >
                               + Add Session
                             </Button>
-                            {errors.lectureSessions && <InlineError message={errors.lectureSessions} />}
+                            {errors.lectureSessions && (
+                              <Alert variant="danger" className="mt-2 mb-0 py-2">
+                                {errors.lectureSessions}
+                              </Alert>
+                            )}
                             <small className="text-muted d-block mt-2">
                               Added: {lectureSessions.reduce((total, s) => {
                                 if (!s.time_slot) return total;
@@ -734,7 +1007,7 @@ const AddOtherDepartment: React.FC = () => {
                               style={{ maxWidth: '200px', borderColor: errors.tutorialSection ? '#dc3545' : '#87CEEB' }}
                               isInvalid={!!errors.tutorialSection}
                             />
-                       {errors.tutorialSection && <InlineError message={errors.tutorialSection} />}
+                            {errors.tutorialSection && <ErrorMessage message={errors.tutorialSection} />}
                           </Form.Group>
 
                           <Row className="g-2">
@@ -763,7 +1036,7 @@ const AddOtherDepartment: React.FC = () => {
                                 style={{ borderColor: '#87CEEB' }}
                               >
                                 <option value="">Select Time Slot</option>
-                                {timeSlots
+                                {allTimeSlots
                                   .filter(t => {
                                     if (t.time_slot === '12:00-12:50') return false;
                                     const [start, end] = t.time_slot.split('-');
@@ -779,7 +1052,11 @@ const AddOtherDepartment: React.FC = () => {
                               </Form.Select>
                             </Col>
                           </Row>
-                          {errors.tutorialSession && <InlineError message={errors.tutorialSession} />}
+                          {errors.tutorialSession && (
+                            <Alert variant="danger" className="mt-2 mb-0 py-2">
+                              {errors.tutorialSession}
+                            </Alert>
+                          )}
                         </Card.Body>
                       </Card>
                     )}
@@ -808,7 +1085,7 @@ const AddOtherDepartment: React.FC = () => {
                               style={{ maxWidth: '200px', borderColor: errors.labSection ? '#dc3545' : '#87CEEB' }}
                               isInvalid={!!errors.labSection}
                             />
-                  {errors.labSection && <InlineError message={errors.labSection} />}
+                            {errors.labSection && <ErrorMessage message={errors.labSection} />}
                           </Form.Group>
 
                           <Row className="g-2">
@@ -837,7 +1114,7 @@ const AddOtherDepartment: React.FC = () => {
                                 style={{ borderColor: '#87CEEB' }}
                               >
                                 <option value="">Select 2-Hour Block</option>
-                                {timeSlots
+                                {allTimeSlots
                                   .filter(t => {
                                     if (t.time_slot === '12:00-12:50') return false;
                                     if (t.time_slot.includes('12:00') || t.time_slot.includes('12:50')) return false;
@@ -853,118 +1130,47 @@ const AddOtherDepartment: React.FC = () => {
                               </Form.Select>
                             </Col>
                           </Row>
-                          {errors.labSession && <InlineError message={errors.labSession} />}
+                          {errors.labSession && (
+                            <Alert variant="danger" className="mt-2 mb-0 py-2">
+                              {errors.labSession}
+                            </Alert>
+                          )}
                         </Card.Body>
                       </Card>
                     )}
+
+                    <div className="d-flex gap-2">
+                      <Button
+                        type="submit"
+                        className="border-0 shadow-sm"
+                        style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' }}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (editingCourse ? 'Updating...' : 'Adding...') : (editingCourse ? 'Update Course' : 'Add Course to Schedule')}
+                      </Button>
+                      {editingCourse && (
+                        <Button
+                          type="button"
+                          className="border-0"
+                          style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                          onClick={() => {
+                            handleCourseSelect('');
+                            setEditingCourse(null);
+                          }}
+                        >
+                          Cancel Edit
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
-
-              {errors.general && (
-                  <div ref={generalErrorRef} className="mb-3">
-                    <InlineError message={errors.general} />
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={!selectedCourse}
-                  size="lg"
-                  className="border-0 shadow-sm"
-                  style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' }}
-                >
-                  Add to Schedule
-                </Button>
               </Form>
             </Card.Body>
           </Card>
-
-          {Object.keys(groupedEntries).length > 0 && (
-            <Card className="shadow-sm border-0">
-              <Card.Header style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' }} className="text-white py-3">
-                <h5 className="mb-0 fw-semibold">Current Schedule - Level {level}, Group {group}</h5>
-              </Card.Header>
-              <Card.Body className="p-0">
-                {Object.entries(groupedEntries).map(([courseCode, entries]) => {
-                  const groupedBySection = entries.reduce((acc, entry) => {
-                    const key = `${entry.section_num}-${entry.activity_type}`;
-                    if (!acc[key]) {
-                      acc[key] = {
-                        section_num: entry.section_num,
-                        activity_type: entry.activity_type,
-                        sessions: []
-                      };
-                    }
-                    acc[key].sessions.push({
-                      day: entry.day,
-                      time_slot: entry.time_slot
-                    });
-                    return acc;
-                  }, {} as Record<string, { section_num: number; activity_type: string; sessions: { day: string; time_slot: string }[] }>);
-
-                  return (
-                    <div key={courseCode} className="border-bottom p-3">
-                      <Row className="align-items-center mb-2">
-                        <Col>
-                          <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
-                            {courseCode} - {entries[0].course_name}
-                          </h6>
-                        </Col>
-                        <Col xs="auto">
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => handleDeleteCourse(courseCode)}
-                          >
-                            Delete All
-                          </Button>
-                        </Col>
-                      </Row>
-                      <Table size="sm" className="mb-0">
-                        <thead style={{ background: '#87CEEB' }}>
-                          <tr>
-                            <th style={{ color: '#1e3a5f' }}>Section</th>
-                            <th style={{ color: '#1e3a5f' }}>Type</th>
-                            <th style={{ color: '#1e3a5f' }}>Day</th>
-                            <th style={{ color: '#1e3a5f' }}>Time</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.values(groupedBySection).map((group, idx) => (
-                            <tr key={idx}>
-                              <td>{group.section_num}</td>
-                              <td>
-                                <span style={{
-                                  background: group.activity_type === 'Lecture' ? '#e3f2fd' : 
-                                             group.activity_type === 'Lab' ? '#f3e5f5' : '#e8f5e9',
-                                  padding: '4px 12px',
-                                  borderRadius: '12px',
-                                  fontSize: '0.85rem',
-                                  fontWeight: '500'
-                                }}>
-                                  {group.activity_type}
-                                </span>
-                              </td>
-                              <td>
-                                {group.sessions.map(s => s.day).join(', ')}
-                              </td>
-                              <td>
-                                {Array.from(new Set(group.sessions.map(s => s.time_slot))).join(', ')}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </div>
-                  );
-                })}
-              </Card.Body>
-            </Card>
-          )}
         </Container>
       </div>
     </Layout>
   );
 };
 
-export default AddOtherDepartment;
+export default EditSchedule;

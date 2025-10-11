@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
-  const { level, excludeSWE } = req.query;
+  const { level, excludeSWE, is_elective } = req.query;
 
   try {
     let query = `
@@ -15,14 +15,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              lecture_hours, tutorial_hours, lab_hours
       FROM course
     `;
-    const params: any[] = [];
 
-    // ✅ Add conditions dynamically
+    const params: any[] = [];
     const conditions: string[] = [];
 
-    if (level) {
+    // ✅ Filter by elective status if requested
+    if (is_elective === 'true') {
+      conditions.push(`is_elective = true`);
+    } else if (level) {
+      // ✅ When filtering by level, exclude electives
       conditions.push(`level = $${params.length + 1}`);
       params.push(level);
+      conditions.push(`(is_elective = false OR is_elective IS NULL)`);
     }
 
     // ✅ Exclude SWE courses if requested

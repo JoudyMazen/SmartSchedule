@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // 4️⃣ Role validation
-  const allowedRoles = ['student', 'faculty', 'scheduling_committee'];
+  const allowedRoles = ['student', 'faculty', 'scheduling_committee', 'teaching_load_committee'];
   if (!allowedRoles.includes(role)) {
     return res.status(400).json({
       success: false,
