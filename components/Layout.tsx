@@ -40,6 +40,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     },
   ];
 
+  // Check if current page is Teaching Load Committee page
+  const isTeachingLoadCommitteePage = router.pathname.includes('teachingLoadCommittee');
+
   return (
     <>
       <link
@@ -77,7 +80,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             <Navbar.Collapse id="basic-navbar-nav">
               <Nav className="me-auto">
-                {navigationItems.map((item, index) => (
+                {/* Only show navigation items if NOT on Teaching Load Committee page */}
+                {!isTeachingLoadCommitteePage && navigationItems.map((item, index) => (
                   <Nav.Link
                     key={index}
                     href={item.href}

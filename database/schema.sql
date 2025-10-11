@@ -90,6 +90,16 @@ CREATE TABLE Comment (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE teaching_load_feedback (
+  feedback_id SERIAL PRIMARY KEY,
+  schedule_id INT,
+  user_id INT REFERENCES "user"(user_id) ON DELETE CASCADE,
+  comment TEXT NOT NULL,
+  feedback_type TEXT NOT NULL,
+  level INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ========== RELATIONSHIPS ===================
 
 CREATE TABLE Contain (

@@ -22,6 +22,8 @@ const LoginPage: React.FC = () => {
       case "scheduling_committee":
       case "committee":
         return "/scheduleCommittee/scheduleCommitteeHomePage";
+      case "teaching_load_committee":
+        return "/teachingLoadCommittee/teachingLoadCommitteeHomePage";
       case "faculty":
         return "/facultyHomePage";
       case "student":
