@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Table, Button, Alert, Modal, Spinner, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Form, Table, Button, Alert, Modal, Spinner, InputGroup } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
 interface Course {
   course_code: string;
   course_name: string;
-  level: number;
+  level: number | null;
+  is_elective: boolean;
 }
 
 interface Section {
@@ -17,8 +18,14 @@ interface Section {
   activity_type: string;
 }
 
+interface Level {
+  level_num: number;
+  groups: number[];
+}
+
 const SectionManagementPage: React.FC = () => {
-  const [selectedLevel, setSelectedLevel] = useState<number>(3);
+  const [selectedLevel, setSelectedLevel] = useState<string>('');
+  const [levels, setLevels] = useState<Level[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,17 +33,50 @@ const SectionManagementPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [capacity, setCapacity] = useState(25);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const levels = [3, 4, 5, 6, 7, 8];
-
+  // Fetch levels on mount
   useEffect(() => {
-    fetchCourses();
+    fetchLevels();
+  }, []);
+
+  // Fetch courses when level changes
+  useEffect(() => {
+    if (selectedLevel) {
+      fetchCourses();
+    }
   }, [selectedLevel]);
+
+  const fetchLevels = async () => {
+    try {
+      const response = await fetch('/api/data/levels');
+      const data = await response.json();
+      if (data.success && Array.isArray(data.levels)) {
+        setLevels(data.levels);
+        // Set first level as default
+        if (data.levels.length > 0) {
+          setSelectedLevel(data.levels[0].level_num.toString());
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching levels:', error);
+      setAlert({type: 'danger', message: 'Failed to load levels'});
+    }
+  };
 
   const fetchCourses = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/data/courses?level=${selectedLevel}`);
+      let url = '';
+      if (selectedLevel === 'elective') {
+        // Fetch only elective courses
+        url = `/api/data/courses?is_elective=true`;
+      } else {
+        // Fetch courses by level
+        url = `/api/data/courses?level=${selectedLevel}`;
+      }
+      
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success && Array.isArray(data.courses)) {
         setCourses(data.courses);
@@ -51,6 +91,11 @@ const SectionManagementPage: React.FC = () => {
   };
 
   const fetchAllSections = async (courseCodes: string[]) => {
+    if (courseCodes.length === 0) {
+      setSections([]);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/scheduleCommittee/sections?level=${selectedLevel}&course_codes=${courseCodes.join(',')}`);
       const data = await response.json();
@@ -87,6 +132,8 @@ const SectionManagementPage: React.FC = () => {
         fetchCourses();
         setShowModal(false);
         setEditingSection(null);
+        
+        setTimeout(() => setAlert(null), 5000);
       } else {
         setAlert({type: 'danger', message: data.error || 'Failed to update'});
       }
@@ -104,6 +151,44 @@ const SectionManagementPage: React.FC = () => {
     return courseSections.reduce((sum, s) => sum + s.capacity, 0);
   };
 
+  const getHeaderTitle = () => {
+    if (selectedLevel === 'elective') {
+      return 'All Elective Courses';
+    }
+    return `Level ${selectedLevel} Courses`;
+  };
+
+  // Filter and sort courses
+  const getFilteredAndSortedCourses = () => {
+    let filtered = courses;
+
+    // Apply search filter
+    if (searchTerm.trim() !== '') {
+      const search = searchTerm.toLowerCase();
+      filtered = courses.filter(course => 
+        course.course_code.toLowerCase().includes(search) ||
+        course.course_name.toLowerCase().includes(search)
+      );
+    }
+
+    // Sort: courses with sections first, then alphabetically
+    return filtered.sort((a, b) => {
+      const aSections = getSectionsForCourse(a.course_code).length;
+      const bSections = getSectionsForCourse(b.course_code).length;
+
+      // If one has sections and the other doesn't, prioritize the one with sections
+      if (aSections > 0 && bSections === 0) return -1;
+      if (aSections === 0 && bSections > 0) return 1;
+
+      // If both have sections or both don't, sort alphabetically by course code
+      return a.course_code.localeCompare(b.course_code);
+    });
+  };
+
+  const filteredCourses = getFilteredAndSortedCourses();
+  const coursesWithSections = filteredCourses.filter(c => getSectionsForCourse(c.course_code).length > 0).length;
+  const coursesWithoutSections = filteredCourses.length - coursesWithSections;
+
   return (
     <Layout>
       <style>{`
@@ -117,6 +202,13 @@ const SectionManagementPage: React.FC = () => {
         }
         .section-row:hover {
           background-color: #e6f4ff;
+        }
+        .elective-card {
+          border-left: 4px solid #87CEEB;
+        }
+        .search-input:focus {
+          border-color: #87CEEB;
+          box-shadow: 0 0 0 0.2rem rgba(135, 206, 235, 0.25);
         }
       `}</style>
 
@@ -139,52 +231,66 @@ const SectionManagementPage: React.FC = () => {
 
           <Card className="mb-4 border-0 shadow-sm" style={{ background: 'white' }}>
             <Card.Body>
-              <Row className="align-items-center">
+              <Row className="mb-3">
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                       <i className="bi bi-filter me-2"></i>
-                      Select Level
+                      Select Category
                     </Form.Label>
                     <Form.Select
                       value={selectedLevel}
-                      onChange={(e) => setSelectedLevel(parseInt(e.target.value))}
+                      onChange={(e) => {
+                        setSelectedLevel(e.target.value);
+                        setSearchTerm(''); // Clear search when changing level
+                      }}
                       className="border-2"
                       style={{ borderColor: '#87CEEB' }}
                       size="lg"
                     >
                       {levels.map(level => (
-                        <option key={level} value={level}>Level {level}</option>
+                        <option key={level.level_num} value={level.level_num}>
+                          Level {level.level_num}
+                        </option>
                       ))}
+                      <option value="elective">All Electives</option>
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={6} className="text-end">
-                  <span 
-                    className="me-3 px-3 py-2 rounded"
-                    style={{ 
-                      background: '#e6f4ff',
-                      color: '#1e3a5f',
-                      fontWeight: '600',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <i className="bi bi-book me-1"></i>
-                    {courses.length} Courses
-                  </span>
-                  <span 
-                    className="px-3 py-2 rounded"
-                    style={{ 
-                      background: '#b0c4d4',
-                      color: '#1e3a5f',
-                      fontWeight: '600',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    <i className="bi bi-grid-3x3 me-1"></i>
-                    {sections.length} Sections
-                  </span>
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
+                      <i className="bi bi-search me-2"></i>
+                      Search Courses
+                    </Form.Label>
+                    <InputGroup size="lg">
+                      <InputGroup.Text style={{ background: '#87CEEB', borderColor: '#87CEEB' }}>
+                        <i className="bi bi-search" style={{ color: '#1e3a5f' }}></i>
+                      </InputGroup.Text>
+                      <Form.Control
+                        type="text"
+                        placeholder="Search by code or name..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="search-input border-2"
+                        style={{ borderColor: '#87CEEB', borderLeft: 'none' }}
+                      />
+                      {searchTerm && (
+                        <Button
+                          variant="outline-secondary"
+                          onClick={() => setSearchTerm('')}
+                          style={{ borderColor: '#87CEEB' }}
+                        >
+                          <i className="bi bi-x-lg"></i>
+                        </Button>
+                      )}
+                    </InputGroup>
+                  </Form.Group>
                 </Col>
+              </Row>
+
+              <Row className="align-items-center">
+                
               </Row>
             </Card.Body>
           </Card>
@@ -196,31 +302,72 @@ const SectionManagementPage: React.FC = () => {
             </div>
           )}
 
-          {!isLoading && courses.map((course) => {
+          {!isLoading && filteredCourses.length === 0 && (
+            <Card className="border-0 shadow-sm">
+              <Card.Body className="text-center p-5">
+                <i className="bi bi-inbox" style={{ fontSize: '3rem', opacity: 0.3, color: '#5a7a99' }}></i>
+                <p className="mt-3 mb-0" style={{ color: '#5a7a99' }}>
+                  {searchTerm ? `No courses found matching "${searchTerm}"` : `No courses available for ${getHeaderTitle()}`}
+                </p>
+                {searchTerm && (
+                  <Button
+                    variant="link"
+                    onClick={() => setSearchTerm('')}
+                    style={{ color: '#1e3a5f' }}
+                  >
+                    Clear search
+                  </Button>
+                )}
+              </Card.Body>
+            </Card>
+          )}
+
+          {!isLoading && filteredCourses.map((course) => {
             const courseSections = getSectionsForCourse(course.course_code);
             const totalCapacity = getTotalCapacityForCourse(course.course_code);
+            const isElective = course.is_elective === true;
+            const hasSections = courseSections.length > 0;
 
             return (
-              <Card key={course.course_code} className="mb-4 course-card border-0 shadow-sm">
+              <Card 
+                key={course.course_code} 
+                className={`mb-4 course-card border-0 shadow-sm ${isElective ? 'elective-card' : ''}`}
+              >
                 <Card.Header 
                   className="py-3"
                   style={{ 
-                    background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
-                    color: 'white'
+                    background: isElective 
+                      ? 'linear-gradient(135deg, #87CEEB 0%, #b0c4d4 100%)'
+                      : 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                    color: isElective ? '#1e3a5f' : 'white'
                   }}
                 >
                   <Row className="align-items-center">
                     <Col>
-                      <h5 className="mb-0 fw-semibold">
+                      <h5 className="mb-0 fw-semibold d-flex align-items-center flex-wrap gap-2">
                         {course.course_code} - {course.course_name}
+                        {isElective && (
+                          <span 
+                            className="px-2 py-1 rounded"
+                            style={{ 
+                              background: 'white',
+                              color: '#1e3a5f',
+                              fontSize: '0.7rem',
+                              fontWeight: '600'
+                            }}
+                          >
+                            ELECTIVE
+                          </span>
+                        )}
+                       
                       </h5>
                     </Col>
                     <Col xs="auto">
                       <span 
                         className="me-2 px-3 py-1 rounded"
                         style={{ 
-                          background: 'white',
-                          color: '#1e3a5f',
+                          background: isElective ? '#1e3a5f' : 'white',
+                          color: isElective ? 'white' : '#1e3a5f',
                           fontWeight: '600',
                           fontSize: '0.85rem'
                         }}
@@ -230,13 +377,13 @@ const SectionManagementPage: React.FC = () => {
                       <span 
                         className="px-3 py-1 rounded"
                         style={{ 
-                          background: '#87CEEB',
+                          background: isElective ? 'white' : '#87CEEB',
                           color: '#1e3a5f',
                           fontWeight: '600',
                           fontSize: '0.85rem'
                         }}
                       >
-                        {courseSections.length} sections
+                        {courseSections.length} section{courseSections.length !== 1 ? 's' : ''}
                       </span>
                     </Col>
                   </Row>
