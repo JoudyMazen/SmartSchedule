@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.0.1",
-    "@supabase/supabase-js": "^2.74.0",
+    "@supabase/supabase-js": "^2.75.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "bootstrap": "^5.3.8",

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Form, Table, Alert, Spinner, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Form, Table, Alert, Spinner, Modal, Nav, Tab } from 'react-bootstrap';
 import Layout from '../../components/Layout';
+import IrregularStudentsPage from './IrregularStudents';
 
 interface ScheduleEntry {
   schedule_id: number;
@@ -49,6 +50,9 @@ const SchedulingCommitteeHomePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState<{type: 'success' | 'danger' | 'warning', message: string} | null>(null);
   const addCourseFormRef = React.useRef<HTMLDivElement>(null);
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState('schedule');
   
   // Modal states
   const [showEditScheduleModal, setShowEditScheduleModal] = useState(false);
@@ -861,10 +865,10 @@ const generateAISchedule = async () => {
         <Container className="py-4">
           <div className="mb-4">
             <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>
-              Schedule Management
+              Scheduling Committee Dashboard
             </h2>
             <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-              View and manage course schedules by level and group (08:00 - 14:50)
+              Manage schedules and irregular students
             </p>
           </div>
 
@@ -879,14 +883,62 @@ const generateAISchedule = async () => {
             </Alert>
           )}
 
-          {isLoading ? (
-            <div className="text-center p-5">
-              <Spinner animation="border" style={{ color: '#1e3a5f' }} />
-              <p className="mt-3" style={{ color: '#1e3a5f' }}>Loading schedule data...</p>
-            </div>
-          ) : (
-            renderScheduleTab()
-          )}
+          <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'schedule')}>
+            <Row>
+              <Col>
+                <Nav variant="tabs" className="border-0 mb-4">
+                  <Nav.Item>
+                    <Nav.Link 
+                      eventKey="schedule" 
+                      className={`px-4 py-3 ${activeTab === 'schedule' ? 'active' : ''}`}
+                      style={{ 
+                        borderRadius: '10px 10px 0 0',
+                        background: activeTab === 'schedule' ? 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' : 'transparent',
+                        color: activeTab === 'schedule' ? 'white' : '#1e3a5f',
+                        border: 'none',
+                        fontWeight: '600'
+                      }}
+                    >
+                      <i className="fas fa-calendar-alt me-2"></i>
+                      Schedule Management
+                    </Nav.Link>
+                  </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link 
+                      eventKey="irregular" 
+                      className={`px-4 py-3 ${activeTab === 'irregular' ? 'active' : ''}`}
+                      style={{ 
+                        borderRadius: '10px 10px 0 0',
+                        background: activeTab === 'irregular' ? 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' : 'transparent',
+                        color: activeTab === 'irregular' ? 'white' : '#1e3a5f',
+                        border: 'none',
+                        fontWeight: '600'
+                      }}
+                    >
+                      <i className="fas fa-user-graduate me-2"></i>
+                      Irregular Students
+                    </Nav.Link>
+                  </Nav.Item>
+                </Nav>
+
+                <Tab.Content>
+                  <Tab.Pane eventKey="schedule">
+                    {isLoading ? (
+                      <div className="text-center p-5">
+                        <Spinner animation="border" style={{ color: '#1e3a5f' }} />
+                        <p className="mt-3" style={{ color: '#1e3a5f' }}>Loading schedule data...</p>
+                      </div>
+                    ) : (
+                      renderScheduleTab()
+                    )}
+                  </Tab.Pane>
+                  <Tab.Pane eventKey="irregular">
+                    <IrregularStudentsPage />
+                  </Tab.Pane>
+                </Tab.Content>
+              </Col>
+            </Row>
+          </Tab.Container>
         </Container>
       </div>
 
