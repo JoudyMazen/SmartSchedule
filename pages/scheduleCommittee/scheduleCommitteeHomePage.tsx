@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Alert, Spinner, Nav, Tab } from 'react-bootstrap';
+import { Container, Row, Col, Alert, Spinner, Nav, Tab, Modal, Button } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 import IrregularStudentsPage from './IrregularStudents';
 import ScheduleTable from '../../components/ScheduleTable';
@@ -15,6 +15,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [activeTab, setActiveTab] = useState('schedule');
   const [showConfigureGroupsModal, setShowConfigureGroupsModal] = useState(false);
+  const [showIrregularStudentsModal, setShowIrregularStudentsModal] = useState(false);
   const [feedbacks, setFeedbacks] = useState([]);
 
   // Custom hooks
@@ -196,6 +197,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
             onManageGroups={() => setShowConfigureGroupsModal(true)}
             onGenerateAI={generateAISchedule}
             onPublishSchedule={publishSchedule}
+            onIrregularStudents={() => setShowIrregularStudentsModal(true)}
             onRefresh={() => setRefreshCounter((c) => c + 1)}
             isLoading={isLoading}
           />
@@ -263,15 +265,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                   </Nav.Item>
                   <Nav.Item>
                     <Nav.Link
-                      eventKey="irregular"
-                      className={`nav-tab px-4 py-3 ${activeTab === 'irregular' ? 'active' : ''}`}
-                    >
-                      <i className="fas fa-user-graduate me-2"></i>
-                      Irregular Students
-                    </Nav.Link>
-                  </Nav.Item>
-                  <Nav.Item>
-                    <Nav.Link
                       eventKey="feedback"
                       className={`nav-tab px-4 py-3 ${activeTab === 'feedback' ? 'active' : ''}`}
                     >
@@ -294,9 +287,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                     ) : (
                       renderScheduleTab()
                     )}
-                  </Tab.Pane>
-                  <Tab.Pane eventKey="irregular">
-                    <IrregularStudentsPage />
                   </Tab.Pane>
                   <Tab.Pane eventKey="feedback">
                     <div className="mt-4">
@@ -367,6 +357,28 @@ const SchedulingCommitteeHomePage: React.FC = () => {
             </Row>
           </Tab.Container>
         </Container>
+
+        {/* Irregular Students Modal */}
+        <Modal 
+          show={showIrregularStudentsModal} 
+          onHide={() => setShowIrregularStudentsModal(false)} 
+          size="xl" 
+          centered
+        >
+          <Modal.Header 
+            closeButton 
+            className="text-white border-0"
+            style={{ background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)' }}
+          >
+            <Modal.Title>
+              <i className="fas fa-user-graduate me-2"></i>
+              Irregular Students Management
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body className="p-0">
+            <IrregularStudentsPage />
+          </Modal.Body>
+        </Modal>
       </div>
     </Layout>
   );

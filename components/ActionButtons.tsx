@@ -6,6 +6,7 @@ interface ActionButtonsProps {
   onManageGroups: () => void;
   onGenerateAI: () => void;
   onPublishSchedule: () => void;
+  onIrregularStudents: () => void;
   onRefresh: () => void;
   isLoading: boolean;
 }
@@ -14,6 +15,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
   onManageGroups,
   onGenerateAI,
   onPublishSchedule,
+  onIrregularStudents,
   onRefresh,
   isLoading
 }) => {
@@ -64,6 +66,19 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           >
             <i className="bi bi-magic me-2"></i>
             Generate AI Schedule
+          </Button>
+          <Button
+            className="border-0 shadow-sm"
+            style={{
+              background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+              color: 'white',
+              padding: '8px 20px',
+              fontSize: '0.9rem'
+            }}
+            onClick={onIrregularStudents}
+          >
+            <i className="bi bi-person-exclamation me-2"></i>
+            Irregular Students
           </Button>
           <Button
             className="border-0 shadow-sm"
