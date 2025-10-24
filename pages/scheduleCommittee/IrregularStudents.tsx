@@ -22,7 +22,6 @@ interface Course {
 }
 
 interface FormData {
-  name: string;
   university_id: string;
   level: number;
   remaining_courses: string[];
@@ -37,7 +36,6 @@ const IrregularStudentsPage: React.FC = () => {
   // Form
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    name: '',
     university_id: '',
     level: 6,
     remaining_courses: []
@@ -194,7 +192,6 @@ const IrregularStudentsPage: React.FC = () => {
 
   const validateForm = () => {
     const newErrors: any = {};
-    if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.university_id.trim()) {
       newErrors.university_id = 'University ID is required';
     } else if (!/^\d{9}$/.test(formData.university_id)) {
@@ -214,7 +211,7 @@ const IrregularStudentsPage: React.FC = () => {
     setIsLoading(true);
     try {
       const payload: Omit<IrregularStudent, 'student_id' | 'created_at'> = {
-        name: formData.name.trim(),
+        name: '', // Empty name since we removed the field
         university_id: formData.university_id.trim(),
         level: formData.level,
         remaining_courses: formData.remaining_courses,
@@ -223,7 +220,7 @@ const IrregularStudentsPage: React.FC = () => {
       setStudents(prev => [created, ...prev]);
       setAlert({ type: 'success', message: 'Irregular student added successfully!' });
       setShowAddModal(false);
-      setFormData({ name: '', university_id: '', level: 6, remaining_courses: [] });
+      setFormData({ university_id: '', level: 6, remaining_courses: [] });
     } catch (err: any) {
       setAlert({ type: 'danger', message: `Failed to add irregular student: ${err.message || err}` });
     } finally {
@@ -317,7 +314,7 @@ const IrregularStudentsPage: React.FC = () => {
         </Row>
       )}
 
-      {/* Statistics */}
+      {/* Total Count */}
       <Row className="mb-4">
         <Col md={3}>
           <Card className="border-0 shadow-sm h-100">
@@ -327,45 +324,6 @@ const IrregularStudentsPage: React.FC = () => {
               </div>
               <h4 className="mb-1" style={{ color: '#1e3a5f' }}>{students.length}</h4>
               <p className="text-muted mb-0">Total Irregular Students</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="text-center">
-              <div className="mb-2">
-                <i className="fas fa-graduation-cap text-success" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="mb-1" style={{ color: '#1e3a5f' }}>
-                {students.reduce((sum, s) => sum + s.remaining_courses.length, 0)}
-              </h4>
-              <p className="text-muted mb-0">Total Remaining Courses</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="text-center">
-              <div className="mb-2">
-                <i className="fas fa-chart-bar text-warning" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="mb-1" style={{ color: '#1e3a5f' }}>
-                {students.length > 0 ? (students.reduce((s, x) => s + x.remaining_courses.length, 0) / students.length).toFixed(1) : 0}
-              </h4>
-              <p className="text-muted mb-0">Avg Courses per Student</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="text-center">
-              <div className="mb-2">
-                <i className="fas fa-calendar-alt text-info" style={{ fontSize: '2rem' }}></i>
-              </div>
-              <h4 className="mb-1" style={{ color: '#1e3a5f' }}>
-                {new Set(students.map((s) => s.level)).size}
-              </h4>
-              <p className="text-muted mb-0">Levels Affected</p>
             </Card.Body>
           </Card>
         </Col>
@@ -502,24 +460,6 @@ const IrregularStudentsPage: React.FC = () => {
         <Modal.Body className="p-4">
           <Form onSubmit={handleSubmit}>
             <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
-                    <i className="fas fa-user me-2"></i>
-                    Student Name *
-                  </Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="Enter student full name"
-                    className={errors.name ? 'is-invalid' : ''}
-                    style={{ borderRadius: '8px' }}
-                  />
-                  {errors.name && <div className="invalid-feedback">{errors.name}</div>}
-                </Form.Group>
-              </Col>
               <Col md={6}>
                 <Form.Group className="mb-3">
                   <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>

@@ -69,12 +69,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           </Button>
           <Button
             className="border-0 shadow-sm"
-            style={{
-              background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
-              color: 'white',
-              padding: '8px 20px',
-              fontSize: '0.9rem'
-            }}
+            style={buttonStyle}
             onClick={onIrregularStudents}
           >
             <i className="bi bi-person-exclamation me-2"></i>
@@ -82,12 +77,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           </Button>
           <Button
             className="border-0 shadow-sm"
-            style={{
-              background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
-              color: 'white',
-              padding: '8px 20px',
-              fontSize: '0.9rem'
-            }}
+            style={buttonStyle}
             onClick={onPublishSchedule}
             disabled={isLoading}
           >

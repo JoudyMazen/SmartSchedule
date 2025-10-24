@@ -368,11 +368,10 @@ const SchedulingCommitteeHomePage: React.FC = () => {
           <Modal.Header 
             closeButton 
             className="text-white border-0"
-            style={{ background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)' }}
           >
             <Modal.Title>
               <i className="fas fa-user-graduate me-2"></i>
-              Irregular Students Management
             </Modal.Title>
           </Modal.Header>
           <Modal.Body className="p-0">
