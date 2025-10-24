@@ -134,9 +134,9 @@ const FacultyHomePage: React.FC = () => {
       const levelGroups: number[] = groupsJson?.groups || [];
       setGroups(levelGroups);
 
-      // 2) Fetch schedules for all groups in parallel
+      // 2) Fetch published schedules for all groups in parallel
       const schedulePromises = levelGroups.map(async (g) => {
-        const res = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${g}`);
+        const res = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${g}&status=published`);
         const json = await res.json();
         return json?.success && Array.isArray(json.entries) ? json.entries : [];
       });
@@ -147,7 +147,7 @@ const FacultyHomePage: React.FC = () => {
         setScheduleData(combined);
       } else {
         setScheduleData([]);
-        setAlert({ type: 'warning', message: 'No schedule entries found' });
+        setAlert({ type: 'warning', message: 'No published schedule found for this level. Please wait for the scheduling committee to publish the schedule.' });
       }
     } catch (error) {
       console.error('Error fetching schedule:', error);

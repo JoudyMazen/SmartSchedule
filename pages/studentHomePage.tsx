@@ -167,12 +167,13 @@ const StudentHomePage: React.FC = () => {
   const fetchSchedule = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${selectedGroup}`);
+      const response = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${selectedGroup}&status=published`);
       const data = await response.json();
       if (data.success && data.entries) {
         setScheduleData(data.entries);
       } else {
         setScheduleData([]);
+        setAlert({ type: 'warning', message: 'No published schedule found for this level and group. Please wait for the scheduling committee to publish the schedule.' });
       }
     } catch (error) {
       console.error('Error fetching schedule:', error);

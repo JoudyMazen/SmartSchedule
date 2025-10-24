@@ -15,6 +15,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [activeTab, setActiveTab] = useState('schedule');
   const [showConfigureGroupsModal, setShowConfigureGroupsModal] = useState(false);
+  const [feedbacks, setFeedbacks] = useState([]);
 
   // Custom hooks
   const { groups: availableGroups, refetch: refetchGroups } = useAvailableGroups(selectedLevel);
@@ -25,6 +26,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     if (router.query.refresh === 'true') {
       setRefreshCounter((c) => c + 1);
     }
+    fetchFeedbacks();
   }, [router.query.refresh]);
 
   const generateAISchedule = async () => {
@@ -83,6 +85,51 @@ const SchedulingCommitteeHomePage: React.FC = () => {
       showAlert('danger', 'Network error occurred while generating schedule.');
     } finally {
       stopLoading();
+    }
+  };
+
+  const publishSchedule = async () => {
+    if (!confirm(`Publish schedule for Level ${selectedLevel} to faculty and students? This will make the schedule visible to all users.`)) {
+      return;
+    }
+
+    startLoading();
+    clearAlert();
+
+    try {
+      const response = await fetch('/api/scheduleCommittee/publish-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: selectedLevel
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showAlert('success', 'Schedule published successfully! Faculty and students can now view and provide feedback.');
+        setRefreshCounter((c) => c + 1);
+      } else {
+        showAlert('danger', data.message || 'Failed to publish schedule. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error publishing schedule:', error);
+      showAlert('danger', 'Network error occurred while publishing schedule.');
+    } finally {
+      stopLoading();
+    }
+  };
+
+  const fetchFeedbacks = async () => {
+    try {
+      const response = await fetch('/api/scheduleCommittee/feedback');
+      const data = await response.json();
+      if (data.success) {
+        setFeedbacks(data.feedbacks || []);
+      }
+    } catch (error) {
+      console.error('Error fetching feedbacks:', error);
     }
   };
 
@@ -148,6 +195,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
           <ActionButtons
             onManageGroups={() => setShowConfigureGroupsModal(true)}
             onGenerateAI={generateAISchedule}
+            onPublishSchedule={publishSchedule}
             onRefresh={() => setRefreshCounter((c) => c + 1)}
             isLoading={isLoading}
           />
@@ -222,6 +270,18 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                       Irregular Students
                     </Nav.Link>
                   </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link
+                      eventKey="feedback"
+                      className={`nav-tab px-4 py-3 ${activeTab === 'feedback' ? 'active' : ''}`}
+                    >
+                      <i className="fas fa-comments me-2"></i>
+                      Feedback
+                      {feedbacks.length > 0 && (
+                        <span className="badge bg-danger ms-2">{feedbacks.length}</span>
+                      )}
+                    </Nav.Link>
+                  </Nav.Item>
                 </Nav>
 
                 <Tab.Content>
@@ -237,6 +297,70 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                   </Tab.Pane>
                   <Tab.Pane eventKey="irregular">
                     <IrregularStudentsPage />
+                  </Tab.Pane>
+                  <Tab.Pane eventKey="feedback">
+                    <div className="mt-4">
+                      <h4 className="mb-4" style={{ color: '#1e3a5f' }}>
+                        <i className="fas fa-comments me-2"></i>
+                        Feedback from Faculty and Students
+                      </h4>
+                      
+                      {feedbacks.length > 0 ? (
+                        <div className="row g-3">
+                          {feedbacks.map((feedback: any, index: number) => (
+                            <div key={feedback.feedback_id || index} className="col-md-6 col-lg-4">
+                              <div className="card h-100 border-0 shadow-sm">
+                                <div className="card-header d-flex justify-content-between align-items-center" style={{ background: '#f8f9fa' }}>
+                                  <div>
+                                    <strong style={{ color: '#1e3a5f' }}>
+                                      {feedback.first_name} {feedback.last_name}
+                                    </strong>
+                                    <br />
+                                    <small className="text-muted">{feedback.role}</small>
+                                  </div>
+                                  <div className="text-end">
+                                    {feedback.rating && (
+                                      <div className="mb-1">
+                                        {[...Array(5)].map((_, i) => (
+                                          <i
+                                            key={i}
+                                            className={`fas fa-star${i < feedback.rating ? '' : '-o'}`}
+                                            style={{ color: i < feedback.rating ? '#ffc107' : '#dee2e6' }}
+                                          />
+                                        ))}
+                                      </div>
+                                    )}
+                                    <small className="text-muted">
+                                      {feedback.created_at ? new Date(feedback.created_at).toLocaleDateString() : 'N/A'}
+                                    </small>
+                                  </div>
+                                </div>
+                                <div className="card-body">
+                                  <div className="mb-2">
+                                    <span className="badge bg-primary me-2">{feedback.feedback_type}</span>
+                                    {feedback.level_num && (
+                                      <span className="badge bg-secondary">Level {feedback.level_num}</span>
+                                    )}
+                                  </div>
+                                  <p className="card-text">{feedback.comment}</p>
+                                  {feedback.schedule_id && (
+                                    <small className="text-muted">
+                                      Schedule ID: {feedback.schedule_id}
+                                    </small>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-5">
+                          <i className="fas fa-comments text-muted" style={{ fontSize: '3rem' }}></i>
+                          <h5 className="mt-3 text-muted">No feedback received yet</h5>
+                          <p className="text-muted">Feedback from faculty and students will appear here once schedules are published.</p>
+                        </div>
+                      )}
+                    </div>
                   </Tab.Pane>
                 </Tab.Content>
               </Col>

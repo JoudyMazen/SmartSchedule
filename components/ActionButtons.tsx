@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 interface ActionButtonsProps {
   onManageGroups: () => void;
   onGenerateAI: () => void;
+  onPublishSchedule: () => void;
   onRefresh: () => void;
   isLoading: boolean;
 }
@@ -12,6 +13,7 @@ interface ActionButtonsProps {
 const ActionButtons: React.FC<ActionButtonsProps> = ({
   onManageGroups,
   onGenerateAI,
+  onPublishSchedule,
   onRefresh,
   isLoading
 }) => {
@@ -62,6 +64,20 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           >
             <i className="bi bi-magic me-2"></i>
             Generate AI Schedule
+          </Button>
+          <Button
+            className="border-0 shadow-sm"
+            style={{
+              background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+              color: 'white',
+              padding: '8px 20px',
+              fontSize: '0.9rem'
+            }}
+            onClick={onPublishSchedule}
+            disabled={isLoading}
+          >
+            <i className="bi bi-send me-2"></i>
+            Publish to Faculty & Students
           </Button>
           <Button
             className="border-0 shadow-sm"
