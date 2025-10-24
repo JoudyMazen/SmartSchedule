@@ -51,14 +51,28 @@ export async function createUser(
   role: string
 ): Promise<AuthResult> {
   try {
+    console.log('=== Creating user ===');
+    console.log('Input data:', { 
+      firstName, 
+      lastName, 
+      email, 
+      phone: phone || 'empty', 
+      role,
+      passwordLength: password.length 
+    });
+    
     const hashedPassword = await hashPassword(password);
+    console.log('Password hashed successfully');
 
+    console.log('Executing INSERT query...');
     const result = await pool.query(
       `INSERT INTO "user" (first_name, last_name, email, phone, password, role)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING user_id, first_name, last_name, email, phone, role`,
-      [firstName, lastName, email, phone, hashedPassword, role]
+      [firstName, lastName, email, phone || null, hashedPassword, role]
     );
+
+    console.log('User created successfully:', result.rows[0]);
 
     const dbUser = result.rows[0];
 
@@ -75,10 +89,30 @@ export async function createUser(
     const token = generateToken(user);
     return { success: true, user, token };
   } catch (error: any) {
+    console.error('=== CREATE USER ERROR ===');
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Error detail:', error.detail);
+    console.error('Error hint:', error.hint);
+    console.error('Error table:', error.table);
+    console.error('Error constraint:', error.constraint);
+    console.error('Full error:', JSON.stringify(error, null, 2));
+    
     if (error.code === '23505') {
       return { success: false, message: 'Email already exists' };
     }
-    return { success: false, message: 'Failed to create user' };
+    if (error.code === '23502') {
+      return { success: false, message: `Missing required field: ${error.column}` };
+    }
+    if (error.code === '42703') {
+      return { success: false, message: `Database column error: ${error.message}` };
+    }
+    if (error.code === '42P01') {
+      return { success: false, message: 'User table does not exist. Please run database migrations.' };
+    }
+    
+    // Return the actual error message for debugging
+    return { success: false, message: `Database error: ${error.message} (Code: ${error.code})` };
   }
 }
 
@@ -115,6 +149,7 @@ export async function authenticateUser(email: string, password: string): Promise
     const token = generateToken(user);
     return { success: true, user, token };
   } catch (error) {
+    console.error('Authentication error:', error);
     return { success: false, message: 'Authentication failed' };
   }
 }
@@ -141,11 +176,10 @@ export async function getUserById(userId: number): Promise<User | null> {
       role: dbUser.role
     };
   } catch (error) {
+    console.error('Get user by ID error:', error);
     return null;
   }
 }
-
-// Add these functions to the end of your existing lib/auth.ts
 
 // ----------------- GET USER BY EMAIL -----------------
 export async function getUserByEmail(email: string): Promise<any | null> {
