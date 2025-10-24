@@ -13,20 +13,16 @@
     "@fortawesome/fontawesome-free": "^7.0.1",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.75.0",
-    "bcrypt": "^6.0.0",
-    "next": "^14.0.0",
-    "nodemailer": "^6.10.1",
-    "openai": "^6.2.0",
     "bcryptjs": "^2.4.3",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
     "chart.js": "^4.4.0",
-    "crypto": "^1.0.1",
     "dotenv": "^17.2.2",
-    "ethereal-email": "^1.0.0",
     "framer-motion": "^12.23.22",
-    "jsondiffpatch": "^0.6.0",
     "jsonwebtoken": "^9.0.2",
+    "next": "^14.0.0",
+    "nodemailer": "^6.10.1",
+    "openai": "^6.2.0",
     "pg": "^8.11.3",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.10",
@@ -48,5 +44,8 @@
     "eslint": "^8",
     "eslint-config-next": "14.0.0",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.18 <21"
   }
 }
