@@ -106,8 +106,49 @@ const EditSchedule: React.FC = () => {
 
   useEffect(() => {
     fetchSchedule();
-    fetchCourses();
   }, [selectedLevel, selectedGroup]);
+
+  useEffect(() => {
+    if (!selectedLevel) return;
+    
+    const scheduleId = scheduleData.find(e => e.schedule_id)?.schedule_id;
+    const scheduleParam = scheduleId ? `&schedule_id=${scheduleId}` : '';
+    
+    console.log('=== FETCHING COURSES ===');
+    console.log('Selected Level:', selectedLevel);
+    console.log('Schedule Data:', scheduleData);
+    console.log('Schedule ID:', scheduleId);
+    console.log('URL:', `/api/data/courses?level=${selectedLevel}${scheduleParam}`);
+    
+    fetch(`/api/data/courses?level=${selectedLevel}${scheduleParam}`)
+      .then(res => {
+        console.log('Response status:', res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log('=== API RESPONSE ===');
+        console.log('Success:', data.success);
+        console.log('Total courses:', data.courses?.length);
+        console.log('All courses:', data.courses);
+        
+        if (data.success && data.courses) {
+          const required = data.courses.filter((c: Course) => !c.is_elective && c.course_type !== 'elective');
+          const electives = data.courses.filter((c: Course) => c.is_elective || c.course_type === 'elective');
+          
+          console.log('Required courses:', required.length, required);
+          console.log('Elective courses:', electives.length, electives);
+          
+          setCourses(data.courses);
+        } else {
+          console.error('API returned error or no courses');
+          setCourses([]);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch error:', err);
+        setCourses([]);
+      });
+  }, [selectedLevel, selectedGroup, scheduleData.length]);
 
   const fetchTimeSlots = async () => {
     try {
@@ -132,21 +173,6 @@ const EditSchedule: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching days:', error);
-    }
-  };
-
-  const fetchCourses = async () => {
-    try {
-      const scheduleId = scheduleData.find(e => e.group_num === selectedGroup)?.schedule_id;
-      const scheduleParam = scheduleId ? `&schedule_id=${scheduleId}` : '';
-      
-      const response = await fetch(`/api/data/courses?level=${selectedLevel}${scheduleParam}`);
-      const data = await response.json();
-      if (data.success) {
-        setCourses(data.courses);
-      }
-    } catch (error) {
-      console.error('Error fetching courses:', error);
     }
   };
 
@@ -229,7 +255,6 @@ const EditSchedule: React.FC = () => {
 
     setErrors({});
     
-    // Scroll to the form
     setTimeout(() => {
       const formElement = document.querySelector('.border.rounded.p-4.mb-4');
       if (formElement) {
@@ -394,9 +419,7 @@ const EditSchedule: React.FC = () => {
       const result = await response.json();
       
       if (!result.success) {
-        // Skip prerequisite errors
         if (result.error && result.error.includes('prerequisite')) {
-          // Ignore prerequisite errors - just show success
           setAlert({ 
             type: 'success', 
             message: editingCourse 
@@ -407,7 +430,6 @@ const EditSchedule: React.FC = () => {
           handleCourseSelect('');
           setEditingCourse(null);
           await fetchSchedule();
-          await fetchCourses();
           
           setTimeout(() => {
             setAlert(null);
@@ -427,7 +449,6 @@ const EditSchedule: React.FC = () => {
         handleCourseSelect('');
         setEditingCourse(null);
         await fetchSchedule();
-        await fetchCourses();
         
         setTimeout(() => {
           setAlert(null);
@@ -538,7 +559,6 @@ const EditSchedule: React.FC = () => {
           message: `All sessions for ${courseCode} deleted successfully (${sessionCount} ${sessionText} removed)` 
         });
         await fetchSchedule();
-        await fetchCourses();
         
         setTimeout(() => {
           setAlert(null);
@@ -807,7 +827,7 @@ const EditSchedule: React.FC = () => {
                   >
                     <option value="">Select Required Course</option>
                     {courses
-                      .filter(c => c.level === selectedLevel && (c.course_type === 'required' || !c.is_elective))
+                      .filter(c => !c.is_elective && c.course_type !== 'elective')
                       .map(c => (
                         <option key={c.course_code} value={c.course_code}>
                           {c.course_code} - {c.course_name}
@@ -816,7 +836,7 @@ const EditSchedule: React.FC = () => {
                     }
                   </Form.Select>
                   <small className="text-muted d-block mt-1">
-                    Required courses for Level {selectedLevel}
+                    {courses.filter(c => !c.is_elective && c.course_type !== 'elective').length} required course(s) available
                   </small>
                 </Form.Group>
 
@@ -836,14 +856,14 @@ const EditSchedule: React.FC = () => {
                     </span>
                   </Form.Label>
                   <Form.Select
-                    value={selectedCourse?.course_type === 'elective' || (selectedCourse?.is_elective) ? selectedCourse.course_code : ''}
+                    value={selectedCourse?.is_elective || selectedCourse?.course_type === 'elective' ? selectedCourse.course_code : ''}
                     onChange={e => handleCourseSelect(e.target.value)}
                     style={{ borderColor: '#87CEEB' }}
                     disabled={!!editingCourse}
                   >
                     <option value="">Select Elective Course</option>
                     {courses
-                      .filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective))
+                      .filter(c => c.is_elective || c.course_type === 'elective')
                       .map(c => (
                         <option key={c.course_code} value={c.course_code}>
                           {c.course_code} - {c.course_name}
@@ -852,12 +872,10 @@ const EditSchedule: React.FC = () => {
                     }
                   </Form.Select>
                   <small className="text-muted d-block mt-1">
-                    {courses.filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective)).length > 0 ? (
-                      <>
-                        {courses.filter(c => c.level === selectedLevel && (c.course_type === 'elective' || c.is_elective)).length} elective(s) available.
-                      </>
+                    {courses.filter(c => c.is_elective || c.course_type === 'elective').length > 0 ? (
+                      `${courses.filter(c => c.is_elective || c.course_type === 'elective').length} elective(s) available`
                     ) : (
-                      'No electives available.'
+                      'No electives available'
                     )}
                   </small>
                 </Form.Group>
