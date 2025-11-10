@@ -6,6 +6,7 @@ import ScheduleTable from '../../components/ScheduleTable';
 import LevelSelector from '../../components/LevelSelector';
 import ActionButtons from '../../components/ActionButtons';
 import GroupManagerModal from '../../components/GroupManagerModal';
+import VersionHistory from '../../components/VersionHistory';
 import { useRouter } from 'next/router';
 import { useAvailableGroups, useAlert, useLoading } from '../../lib/hooks';
 
@@ -43,7 +44,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
       const results = [];
 
       if (groups.length > 1) {
-        // MULTI-GROUP mode (AI generates all groups at once)
         const response = await fetch('/api/ai/generate-schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
         const data = await response.json();
         results.push(data);
       } else {
-        // SINGLE-GROUP mode
         const response = await fetch('/api/ai/generate-schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -74,7 +73,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
       const failureCount = results.length - successCount;
 
       if (successCount > 0) {
-        // For multi-group mode, get the actual number of groups from the API response
         const actualGroupCount = results[0]?.groups?.length || successCount;
         showAlert('success', `AI schedule generated successfully for ${actualGroupCount} group(s)!${failureCount > 0 ? ` ${failureCount} group(s) failed.` : ''}`);
         setRefreshCounter((c) => c + 1);
@@ -89,8 +87,9 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     }
   };
 
-  const publishSchedule = async () => {
-    if (!confirm(`Publish schedule for Level ${selectedLevel} to faculty and students? This will make the schedule visible to all users.`)) {
+  // ✅ UPDATED: Publish to Faculty and Students
+  const publishToFacultyStudents = async () => {
+    if (!confirm(`Publish schedule for Level ${selectedLevel} to Faculty and Students? This will make the schedule visible to all users.`)) {
       return;
     }
 
@@ -98,18 +97,60 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     clearAlert();
 
     try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      
       const response = await fetch('/api/scheduleCommittee/publish-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          level: selectedLevel
+          level: selectedLevel,
+          publish_to: 'faculty_students',
+          created_by: user.user_id
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        showAlert('success', 'Schedule published successfully! Faculty and students can now view and provide feedback.');
+        showAlert('success', 'Schedule published successfully to Faculty and Students! They can now view and provide feedback.');
+        setRefreshCounter((c) => c + 1);
+      } else {
+        showAlert('danger', data.message || 'Failed to publish schedule. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error publishing schedule:', error);
+      showAlert('danger', 'Network error occurred while publishing schedule.');
+    } finally {
+      stopLoading();
+    }
+  };
+
+  // ✅ NEW: Publish to Teaching Load Committee
+  const publishToTeachingLoad = async () => {
+    if (!confirm(`Publish schedule for Level ${selectedLevel} to Teaching Load Committee? This will send the schedule for review and approval.`)) {
+      return;
+    }
+
+    startLoading();
+    clearAlert();
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      const response = await fetch('/api/scheduleCommittee/publish-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: selectedLevel,
+          publish_to: 'teaching_load',
+          created_by: user.user_id
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showAlert('success', 'Schedule published successfully to Teaching Load Committee for review!');
         setRefreshCounter((c) => c + 1);
       } else {
         showAlert('danger', data.message || 'Failed to publish schedule. Please try again.');
@@ -182,6 +223,10 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     }
   };
 
+  const handleVersionRestore = () => {
+    showAlert('success', 'Version restored successfully!');
+    setRefreshCounter((c) => c + 1);
+  };
 
   const renderScheduleTab = () => (
     <div>
@@ -196,7 +241,8 @@ const SchedulingCommitteeHomePage: React.FC = () => {
           <ActionButtons
             onManageGroups={() => setShowConfigureGroupsModal(true)}
             onGenerateAI={generateAISchedule}
-            onPublishSchedule={publishSchedule}
+            onPublishToFacultyStudents={publishToFacultyStudents}
+            onPublishToTeachingLoad={publishToTeachingLoad}
             onIrregularStudents={() => setShowIrregularStudentsModal(true)}
             onRefresh={() => setRefreshCounter((c) => c + 1)}
             isLoading={isLoading}
@@ -235,7 +281,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
               Scheduling Committee Dashboard
             </h2>
             <p className="text-muted mb-0 schedule-committee-subtitle">
-              Manage schedules and irregular students
+              Manage schedules, view feedback, and track version history
             </p>
           </div>
 
@@ -258,6 +304,22 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                     <Nav.Link
                       eventKey="schedule"
                       className={`nav-tab px-4 py-3 ${activeTab === 'schedule' ? 'active' : ''}`}
+                      style={{
+                        color: 'white',
+                        backgroundColor: '#1e3a5f',
+                        borderRadius: '8px',
+                        marginRight: '8px',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease-in-out',
+                        border: activeTab === 'schedule' ? '2px solid rgba(255,255,255,0.3)' : '2px solid transparent',
+                        boxShadow: activeTab === 'schedule' ? '0 0 8px rgba(255, 255, 255, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#2c5282';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#1e3a5f';
+                      }}
                     >
                       <i className="fas fa-calendar-alt me-2"></i>
                       Schedule Management
@@ -267,12 +329,53 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                     <Nav.Link
                       eventKey="feedback"
                       className={`nav-tab px-4 py-3 ${activeTab === 'feedback' ? 'active' : ''}`}
+                      style={{
+                        color: 'white',
+                        backgroundColor: '#1e3a5f',
+                        borderRadius: '8px',
+                        marginRight: '8px',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease-in-out',
+                        border: activeTab === 'feedback' ? '2px solid rgba(255,255,255,0.3)' : '2px solid transparent',
+                        boxShadow: activeTab === 'feedback' ? '0 0 8px rgba(255, 255, 255, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#2c5282';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#1e3a5f';
+                      }}
                     >
                       <i className="fas fa-comments me-2"></i>
                       Feedback
                       {feedbacks.length > 0 && (
                         <span className="badge bg-danger ms-2">{feedbacks.length}</span>
                       )}
+                    </Nav.Link>
+                  </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link
+                      eventKey="versions"
+                      className={`nav-tab px-4 py-3 ${activeTab === 'versions' ? 'active' : ''}`}
+                      style={{
+                        color: 'white',
+                        backgroundColor: '#1e3a5f',
+                        borderRadius: '8px',
+                        marginRight: '8px',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease-in-out',
+                        border: activeTab === 'versions' ? '2px solid rgba(255,255,255,0.3)' : '2px solid transparent',
+                        boxShadow: activeTab === 'versions' ? '0 0 8px rgba(255, 255, 255, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#2c5282';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#1e3a5f';
+                      }}
+                    >
+                      <i className="fas fa-history me-2"></i>
+                      Version History
                     </Nav.Link>
                   </Nav.Item>
                 </Nav>
@@ -352,13 +455,41 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                       )}
                     </div>
                   </Tab.Pane>
+                  <Tab.Pane eventKey="versions">
+                    <div className="mb-3">
+                      <Row className="g-3">
+                        <Col lg={3} md={4}>
+                          <LevelSelector
+                            selectedLevel={selectedLevel}
+                            onLevelChange={setSelectedLevel}
+                          />
+                        </Col>
+                      </Row>
+                    </div>
+                    
+                    {availableGroups.length > 0 ? (
+                      availableGroups.map(groupNum => (
+                        <div key={groupNum} className="mb-4">
+                          <VersionHistory
+                            level={selectedLevel}
+                            group={groupNum}
+                            onRestore={handleVersionRestore}
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <Alert variant="info">
+                        <i className="fas fa-info-circle me-2"></i>
+                        No groups found for Level {selectedLevel}. Please create groups first.
+                      </Alert>
+                    )}
+                  </Tab.Pane>
                 </Tab.Content>
               </Col>
             </Row>
           </Tab.Container>
         </Container>
 
-        {/* Irregular Students Modal */}
         <Modal 
           show={showIrregularStudentsModal} 
           onHide={() => setShowIrregularStudentsModal(false)} 
@@ -372,6 +503,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
           >
             <Modal.Title>
               <i className="fas fa-user-graduate me-2"></i>
+              Irregular Students Management
             </Modal.Title>
           </Modal.Header>
           <Modal.Body className="p-0">

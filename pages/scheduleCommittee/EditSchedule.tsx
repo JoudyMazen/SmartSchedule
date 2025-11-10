@@ -44,6 +44,7 @@ const EditSchedule: React.FC = () => {
   const router = useRouter();
   const [selectedLevel, setSelectedLevel] = useState(3);
   const [selectedGroup, setSelectedGroup] = useState(1);
+  const [availableGroups, setAvailableGroups] = useState<number[]>([1]); // ✅ NEW STATE
   const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
@@ -87,15 +88,32 @@ const EditSchedule: React.FC = () => {
     }
   }, [errors]);
 
-  const getGroupsForLevel = (level: number): number[] => {
-    switch (level) {
-      case 3: return [1, 2];
-      case 4: return [1];
-      case 5: return [1, 2];
-      case 6: return [1];
-      case 7: return [1, 2];
-      case 8: return [1];
-      default: return [1];
+  // ✅ REMOVED hardcoded getGroupsForLevel function
+
+  // ✅ NEW: Fetch available groups from database
+  const fetchAvailableGroups = async (level: number) => {
+    try {
+      const response = await fetch(`/api/data/manageGroups?level=${level}`);
+      const data = await response.json();
+      
+      if (data.success && data.groups && data.groups.length > 0) {
+        const groupNumbers = data.groups.map((g: any) => g.group_num).sort((a: number, b: number) => a - b);
+        setAvailableGroups(groupNumbers);
+        
+        // If current selected group is not in available groups, select the first one
+        if (!groupNumbers.includes(selectedGroup)) {
+          setSelectedGroup(groupNumbers[0]);
+        }
+      } else {
+        // If no groups exist, default to [1]
+        setAvailableGroups([1]);
+        setSelectedGroup(1);
+      }
+    } catch (error) {
+      console.error('Error fetching available groups:', error);
+      // Fallback to default
+      setAvailableGroups([1]);
+      setSelectedGroup(1);
     }
   };
 
@@ -103,6 +121,11 @@ const EditSchedule: React.FC = () => {
     fetchTimeSlots();
     fetchDays();
   }, []);
+
+  // ✅ UPDATED: Fetch groups when level changes
+  useEffect(() => {
+    fetchAvailableGroups(selectedLevel);
+  }, [selectedLevel]);
 
   useEffect(() => {
     fetchSchedule();
@@ -644,8 +667,7 @@ const EditSchedule: React.FC = () => {
                     onChange={(e) => {
                       const newLevel = parseInt(e.target.value);
                       setSelectedLevel(newLevel);
-                      const groups = getGroupsForLevel(newLevel);
-                      setSelectedGroup(groups[0]);
+                      // Groups will be automatically fetched by useEffect
                       handleCourseSelect('');
                     }}
                     style={{ borderColor: '#87CEEB' }}
@@ -660,7 +682,12 @@ const EditSchedule: React.FC = () => {
             <Col md={6}>
               <Card className="border-0 shadow-sm">
                 <Card.Body>
-                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>Group</Form.Label>
+                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
+                    Group
+                    {availableGroups.length === 0 && (
+                      <small className="text-muted ms-2">(No groups available)</small>
+                    )}
+                  </Form.Label>
                   <Form.Select
                     value={selectedGroup}
                     onChange={(e) => {
@@ -668,11 +695,21 @@ const EditSchedule: React.FC = () => {
                       handleCourseSelect('');
                     }}
                     style={{ borderColor: '#87CEEB' }}
+                    disabled={availableGroups.length === 0}
                   >
-                    {getGroupsForLevel(selectedLevel).map(g => (
-                      <option key={g} value={g}>Group {g}</option>
-                    ))}
+                    {availableGroups.length > 0 ? (
+                      availableGroups.map(g => (
+                        <option key={g} value={g}>Group {g}</option>
+                      ))
+                    ) : (
+                      <option value="">No groups created yet</option>
+                    )}
                   </Form.Select>
+                  <small className="text-muted d-block mt-1">
+                    {availableGroups.length > 0 
+                      ? `${availableGroups.length} group${availableGroups.length > 1 ? 's' : ''} available`
+                      : 'Please create groups from the dashboard first'}
+                  </small>
                 </Card.Body>
               </Card>
             </Col>
@@ -689,6 +726,12 @@ const EditSchedule: React.FC = () => {
               {isLoading ? (
                 <div className="text-center p-5">
                   <Spinner animation="border" style={{ color: '#1e3a5f' }} />
+                </div>
+              ) : availableGroups.length === 0 ? (
+                <div className="text-center p-5 text-muted">
+                  <i className="bi bi-exclamation-circle" style={{ fontSize: '3rem', opacity: 0.3 }}></i>
+                  <p className="mt-3">No groups available for this level</p>
+                  <p className="small">Please create groups from the Scheduling Committee Dashboard first</p>
                 </div>
               ) : Object.keys(getGroupedEntries()).length === 0 ? (
                 <div className="text-center p-5 text-muted">
@@ -795,396 +838,399 @@ const EditSchedule: React.FC = () => {
             </Card.Body>
           </Card>
 
-          <Card className="border-0 shadow-sm">
-            <Card.Header style={{ background: '#87CEEB', color: '#1e3a5f', border: 'none' }} className="py-3">
-              <h6 className="mb-0 fw-semibold">
-                <i className="bi bi-plus-circle me-2"></i>
-                {editingCourse ? `Edit ${editingCourse}` : 'Add New Course'}
-              </h6>
-            </Card.Header>
-            <Card.Body className="p-4">
-              {errors.general && (
-                <Alert ref={generalErrorRef} variant="danger" className="mb-3">
-                  <div className="d-flex align-items-start">
-                    <div className="flex-grow-1">
-                      <strong>Error</strong>
-                      <div className="mt-1">{errors.general}</div>
+          {/* Only show the form if groups are available */}
+          {availableGroups.length > 0 && (
+            <Card className="border-0 shadow-sm">
+              <Card.Header style={{ background: '#87CEEB', color: '#1e3a5f', border: 'none' }} className="py-3">
+                <h6 className="mb-0 fw-semibold">
+                  <i className="bi bi-plus-circle me-2"></i>
+                  {editingCourse ? `Edit ${editingCourse}` : 'Add New Course'}
+                </h6>
+              </Card.Header>
+              <Card.Body className="p-4">
+                {errors.general && (
+                  <Alert ref={generalErrorRef} variant="danger" className="mb-3">
+                    <div className="d-flex align-items-start">
+                      <div className="flex-grow-1">
+                        <strong>Error</strong>
+                        <div className="mt-1">{errors.general}</div>
+                      </div>
                     </div>
-                  </div>
-                </Alert>
-              )}
-              
-              <Form onSubmit={handleSaveCourse}>
-                <Form.Group className="mb-4">
-                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
-                    Required Course
-                  </Form.Label>
-                  <Form.Select
-                    value={selectedCourse?.course_type === 'required' || (selectedCourse && !selectedCourse.is_elective) ? selectedCourse.course_code : ''}
-                    onChange={e => handleCourseSelect(e.target.value)}
-                    style={{ borderColor: '#87CEEB' }}
-                    disabled={!!editingCourse}
-                  >
-                    <option value="">Select Required Course</option>
-                    {courses
-                      .filter(c => !c.is_elective && c.course_type !== 'elective')
-                      .map(c => (
-                        <option key={c.course_code} value={c.course_code}>
-                          {c.course_code} - {c.course_name}
-                        </option>
-                      ))
-                    }
-                  </Form.Select>
-                  <small className="text-muted d-block mt-1">
-                    {courses.filter(c => !c.is_elective && c.course_type !== 'elective').length} required course(s) available
-                  </small>
-                </Form.Group>
-
-                <Form.Group className="mb-4">
-                  <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
-                    <span className="me-2">Elective Course</span>
-                    <span 
-                      className="badge" 
-                      style={{ 
-                        background: 'linear-gradient(135deg, #87CEEB 0%, #87CEEB 100%)',
-                        color: 'white',
-                        padding: '4px 10px',
-                        fontSize: '0.7rem'
-                      }}
+                  </Alert>
+                )}
+                
+                <Form onSubmit={handleSaveCourse}>
+                  <Form.Group className="mb-4">
+                    <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
+                      Required Course
+                    </Form.Label>
+                    <Form.Select
+                      value={selectedCourse?.course_type === 'required' || (selectedCourse && !selectedCourse.is_elective) ? selectedCourse.course_code : ''}
+                      onChange={e => handleCourseSelect(e.target.value)}
+                      style={{ borderColor: '#87CEEB' }}
+                      disabled={!!editingCourse}
                     >
-                      Optional
-                    </span>
-                  </Form.Label>
-                  <Form.Select
-                    value={selectedCourse?.is_elective || selectedCourse?.course_type === 'elective' ? selectedCourse.course_code : ''}
-                    onChange={e => handleCourseSelect(e.target.value)}
-                    style={{ borderColor: '#87CEEB' }}
-                    disabled={!!editingCourse}
-                  >
-                    <option value="">Select Elective Course</option>
-                    {courses
-                      .filter(c => c.is_elective || c.course_type === 'elective')
-                      .map(c => (
-                        <option key={c.course_code} value={c.course_code}>
-                          {c.course_code} - {c.course_name}
-                        </option>
-                      ))
-                    }
-                  </Form.Select>
-                  <small className="text-muted d-block mt-1">
-                    {courses.filter(c => c.is_elective || c.course_type === 'elective').length > 0 ? (
-                      `${courses.filter(c => c.is_elective || c.course_type === 'elective').length} elective(s) available`
-                    ) : (
-                      'No electives available'
-                    )}
-                  </small>
-                </Form.Group>
+                      <option value="">Select Required Course</option>
+                      {courses
+                        .filter(c => !c.is_elective && c.course_type !== 'elective')
+                        .map(c => (
+                          <option key={c.course_code} value={c.course_code}>
+                            {c.course_code} - {c.course_name}
+                          </option>
+                        ))
+                      }
+                    </Form.Select>
+                    <small className="text-muted d-block mt-1">
+                      {courses.filter(c => !c.is_elective && c.course_type !== 'elective').length} required course(s) available
+                    </small>
+                  </Form.Group>
 
-                {selectedCourse && (
-                  <div className="border rounded p-4 mb-4" style={{ background: '#f8f9fa' }}>
-                    <div className="d-flex justify-content-between align-items-center mb-4">
-                      <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
-                        Configure Activities for {selectedCourse.course_code}
-                      </h6>
-                      {(selectedCourse.course_type === 'elective' || selectedCourse.is_elective) && (
-                        <span 
-                          className="badge" 
-                          style={{ 
-                            background: 'linear-gradient(135deg, #87CEEB 0%, #87CEEB 100%)',
-                            color: 'white',
-                            padding: '6px 12px',
-                            fontSize: '0.75rem'
-                          }}
-                        >
-                          Elective Course
-                        </span>
+                  <Form.Group className="mb-4">
+                    <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
+                      <span className="me-2">Elective Course</span>
+                      <span 
+                        className="badge" 
+                        style={{ 
+                          background: 'linear-gradient(135deg, #87CEEB 0%, #87CEEB 100%)',
+                          color: 'white',
+                          padding: '4px 10px',
+                          fontSize: '0.7rem'
+                        }}
+                      >
+                        Optional
+                      </span>
+                    </Form.Label>
+                    <Form.Select
+                      value={selectedCourse?.is_elective || selectedCourse?.course_type === 'elective' ? selectedCourse.course_code : ''}
+                      onChange={e => handleCourseSelect(e.target.value)}
+                      style={{ borderColor: '#87CEEB' }}
+                      disabled={!!editingCourse}
+                    >
+                      <option value="">Select Elective Course</option>
+                      {courses
+                        .filter(c => c.is_elective || c.course_type === 'elective')
+                        .map(c => (
+                          <option key={c.course_code} value={c.course_code}>
+                            {c.course_code} - {c.course_name}
+                          </option>
+                        ))
+                      }
+                    </Form.Select>
+                    <small className="text-muted d-block mt-1">
+                      {courses.filter(c => c.is_elective || c.course_type === 'elective').length > 0 ? (
+                        `${courses.filter(c => c.is_elective || c.course_type === 'elective').length} elective(s) available`
+                      ) : (
+                        'No electives available'
                       )}
-                    </div>
+                    </small>
+                  </Form.Group>
 
-                    {selectedCourse.lecture_hours > 0 && (
-                      <Card className="mb-3 border-0 shadow-sm">
-                        <Card.Body>
-                          <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
-                            Lecture ({selectedCourse.lecture_hours} hours total)
-                          </h6>
-                          
-                          <Form.Group className="mb-3">
-                            <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
-                            <Form.Control
-                              ref={lectureSectionRef}
-                              type="text"
-                              placeholder="50084"
-                              value={lectureSection}
-                              onChange={e => {
-                                const value = e.target.value.replace(/\D/g, '');
-                                if (value.length <= 5) setLectureSection(value);
-                                if (errors.lectureSection) setErrors({ ...errors, lectureSection: undefined });
-                                if (errors.general) setErrors({ ...errors, general: undefined });
-                              }}
-                              maxLength={5}
-                              style={{ maxWidth: '200px', borderColor: errors.lectureSection ? '#dc3545' : '#87CEEB' }}
-                              isInvalid={!!errors.lectureSection}
-                            />
-                            {errors.lectureSection && <ErrorMessage message={errors.lectureSection} />}
-                          </Form.Group>
+                  {selectedCourse && (
+                    <div className="border rounded p-4 mb-4" style={{ background: '#f8f9fa' }}>
+                      <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h6 className="mb-0 fw-semibold" style={{ color: '#1e3a5f' }}>
+                          Configure Activities for {selectedCourse.course_code}
+                        </h6>
+                        {(selectedCourse.course_type === 'elective' || selectedCourse.is_elective) && (
+                          <span 
+                            className="badge" 
+                            style={{ 
+                              background: 'linear-gradient(135deg, #87CEEB 0%, #87CEEB 100%)',
+                              color: 'white',
+                              padding: '6px 12px',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            Elective Course
+                          </span>
+                        )}
+                      </div>
 
-                          <div className="mb-3">
-                            <label className="small fw-bold d-block mb-2">
-                              Sessions (Add up to {selectedCourse.lecture_hours} hours - can use 1-hour or 2-hour blocks)
-                            </label>
-                            {lectureSessions.map((session, idx) => (
-                              <Row key={idx} className="mb-2 g-2">
-                                <Col md={5}>
-                                  <Form.Select
-                                    value={session.day}
-                                    onChange={e => updateLectureSession(idx, 'day', e.target.value)}
-                                    size="sm"
-                                    style={{ borderColor: '#87CEEB' }}
-                                  >
-                                    <option value="">Select Day</option>
-                                    {days.map(d => (
-                                      <option key={d.day} value={d.day}>{d.day}</option>
-                                    ))}
-                                  </Form.Select>
-                                </Col>
-                                <Col md={5}>
-                                  <Form.Select
-                                    value={session.time_slot}
-                                    onChange={e => updateLectureSession(idx, 'time_slot', e.target.value)}
-                                    size="sm"
-                                    style={{ borderColor: '#87CEEB' }}
-                                  >
-                                    <option value="">Select Time</option>
-                                    {allTimeSlots
-                                      .filter(t => t.time_slot !== '12:00-12:50')
-                                      .map(t => (
-                                        <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
-                                      ))
-                                    }
-                                  </Form.Select>
-                                </Col>
-                                <Col md={2}>
-                                  <Button
-                                    size="sm"
-                                    variant="outline-danger"
-                                    onClick={() => removeLectureSession(idx)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </Col>
-                              </Row>
-                            ))}
-                            <Button
-                              size="sm"
-                              variant="outline-primary"
-                              onClick={addLectureSession}
-                              disabled={lectureSessions.length >= selectedCourse.lecture_hours}
-                            >
-                              + Add Session
-                            </Button>
-                            {errors.lectureSessions && (
+                      {selectedCourse.lecture_hours > 0 && (
+                        <Card className="mb-3 border-0 shadow-sm">
+                          <Card.Body>
+                            <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
+                              Lecture ({selectedCourse.lecture_hours} hours total)
+                            </h6>
+                            
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                ref={lectureSectionRef}
+                                type="text"
+                                placeholder="50084"
+                                value={lectureSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) setLectureSection(value);
+                                  if (errors.lectureSection) setErrors({ ...errors, lectureSection: undefined });
+                                  if (errors.general) setErrors({ ...errors, general: undefined });
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: errors.lectureSection ? '#dc3545' : '#87CEEB' }}
+                                isInvalid={!!errors.lectureSection}
+                              />
+                              {errors.lectureSection && <ErrorMessage message={errors.lectureSection} />}
+                            </Form.Group>
+
+                            <div className="mb-3">
+                              <label className="small fw-bold d-block mb-2">
+                                Sessions (Add up to {selectedCourse.lecture_hours} hours - can use 1-hour or 2-hour blocks)
+                              </label>
+                              {lectureSessions.map((session, idx) => (
+                                <Row key={idx} className="mb-2 g-2">
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.day}
+                                      onChange={e => updateLectureSession(idx, 'day', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Select Day</option>
+                                      {days.map(d => (
+                                        <option key={d.day} value={d.day}>{d.day}</option>
+                                      ))}
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={5}>
+                                    <Form.Select
+                                      value={session.time_slot}
+                                      onChange={e => updateLectureSession(idx, 'time_slot', e.target.value)}
+                                      size="sm"
+                                      style={{ borderColor: '#87CEEB' }}
+                                    >
+                                      <option value="">Select Time</option>
+                                      {allTimeSlots
+                                        .filter(t => t.time_slot !== '12:00-12:50')
+                                        .map(t => (
+                                          <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                        ))
+                                      }
+                                    </Form.Select>
+                                  </Col>
+                                  <Col md={2}>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => removeLectureSession(idx)}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </Col>
+                                </Row>
+                              ))}
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                onClick={addLectureSession}
+                                disabled={lectureSessions.length >= selectedCourse.lecture_hours}
+                              >
+                                + Add Session
+                              </Button>
+                              {errors.lectureSessions && (
+                                <Alert variant="danger" className="mt-2 mb-0 py-2">
+                                  {errors.lectureSessions}
+                                </Alert>
+                              )}
+                              <small className="text-muted d-block mt-2">
+                                Added: {lectureSessions.reduce((total, s) => {
+                                  if (!s.time_slot) return total;
+                                  const [start, end] = s.time_slot.split('-');
+                                  const startHour = parseInt(start.split(':')[0]);
+                                  const endHour = parseInt(end.split(':')[0]);
+                                  return total + (endHour - startHour >= 1 ? 2 : 1);
+                                }, 0)} / {selectedCourse.lecture_hours} hours
+                              </small>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      )}
+
+                      {selectedCourse.tutorial_hours > 0 && (
+                        <Card className="mb-3 border-0 shadow-sm">
+                          <Card.Body>
+                            <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
+                              Tutorial ({selectedCourse.tutorial_hours} hour{selectedCourse.tutorial_hours > 1 ? 's' : ''})
+                            </h6>
+                            
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                ref={tutorialSectionRef}
+                                type="text"
+                                placeholder="50085"
+                                value={tutorialSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) setTutorialSection(value);
+                                  if (errors.tutorialSection) setErrors({ ...errors, tutorialSection: undefined });
+                                  if (errors.general) setErrors({ ...errors, general: undefined });
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: errors.tutorialSection ? '#dc3545' : '#87CEEB' }}
+                                isInvalid={!!errors.tutorialSection}
+                              />
+                              {errors.tutorialSection && <ErrorMessage message={errors.tutorialSection} />}
+                            </Form.Group>
+
+                            <Row className="g-2">
+                              <Col md={6}>
+                                <Form.Select
+                                  value={tutorialSession.day}
+                                  onChange={e => {
+                                    setTutorialSession({ ...tutorialSession, day: e.target.value });
+                                    if (errors.tutorialSession) setErrors({ ...errors, tutorialSession: undefined });
+                                  }}
+                                  style={{ borderColor: '#87CEEB' }}
+                                >
+                                  <option value="">Select Day</option>
+                                  {days.map(d => (
+                                    <option key={d.day} value={d.day}>{d.day}</option>
+                                  ))}
+                                </Form.Select>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Select
+                                  value={tutorialSession.time_slot}
+                                  onChange={e => {
+                                    setTutorialSession({ ...tutorialSession, time_slot: e.target.value });
+                                    if (errors.tutorialSession) setErrors({ ...errors, tutorialSession: undefined });
+                                  }}
+                                  style={{ borderColor: '#87CEEB' }}
+                                >
+                                  <option value="">Select Time Slot</option>
+                                  {allTimeSlots
+                                    .filter(t => {
+                                      if (t.time_slot === '12:00-12:50') return false;
+                                      const [start, end] = t.time_slot.split('-');
+                                      const startHour = parseInt(start.split(':')[0]);
+                                      const endHour = parseInt(end.split(':')[0]);
+                                      const hours = endHour - startHour >= 1 ? 2 : 1;
+                                      return hours === selectedCourse.tutorial_hours;
+                                    })
+                                    .map(t => (
+                                      <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                    ))
+                                  }
+                                </Form.Select>
+                              </Col>
+                            </Row>
+                            {errors.tutorialSession && (
                               <Alert variant="danger" className="mt-2 mb-0 py-2">
-                                {errors.lectureSessions}
+                                {errors.tutorialSession}
                               </Alert>
                             )}
-                            <small className="text-muted d-block mt-2">
-                              Added: {lectureSessions.reduce((total, s) => {
-                                if (!s.time_slot) return total;
-                                const [start, end] = s.time_slot.split('-');
-                                const startHour = parseInt(start.split(':')[0]);
-                                const endHour = parseInt(end.split(':')[0]);
-                                return total + (endHour - startHour >= 1 ? 2 : 1);
-                              }, 0)} / {selectedCourse.lecture_hours} hours
-                            </small>
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    )}
-
-                    {selectedCourse.tutorial_hours > 0 && (
-                      <Card className="mb-3 border-0 shadow-sm">
-                        <Card.Body>
-                          <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
-                            Tutorial ({selectedCourse.tutorial_hours} hour{selectedCourse.tutorial_hours > 1 ? 's' : ''})
-                          </h6>
-                          
-                          <Form.Group className="mb-3">
-                            <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
-                            <Form.Control
-                              ref={tutorialSectionRef}
-                              type="text"
-                              placeholder="50085"
-                              value={tutorialSection}
-                              onChange={e => {
-                                const value = e.target.value.replace(/\D/g, '');
-                                if (value.length <= 5) setTutorialSection(value);
-                                if (errors.tutorialSection) setErrors({ ...errors, tutorialSection: undefined });
-                                if (errors.general) setErrors({ ...errors, general: undefined });
-                              }}
-                              maxLength={5}
-                              style={{ maxWidth: '200px', borderColor: errors.tutorialSection ? '#dc3545' : '#87CEEB' }}
-                              isInvalid={!!errors.tutorialSection}
-                            />
-                            {errors.tutorialSection && <ErrorMessage message={errors.tutorialSection} />}
-                          </Form.Group>
-
-                          <Row className="g-2">
-                            <Col md={6}>
-                              <Form.Select
-                                value={tutorialSession.day}
-                                onChange={e => {
-                                  setTutorialSession({ ...tutorialSession, day: e.target.value });
-                                  if (errors.tutorialSession) setErrors({ ...errors, tutorialSession: undefined });
-                                }}
-                                style={{ borderColor: '#87CEEB' }}
-                              >
-                                <option value="">Select Day</option>
-                                {days.map(d => (
-                                  <option key={d.day} value={d.day}>{d.day}</option>
-                                ))}
-                              </Form.Select>
-                            </Col>
-                            <Col md={6}>
-                              <Form.Select
-                                value={tutorialSession.time_slot}
-                                onChange={e => {
-                                  setTutorialSession({ ...tutorialSession, time_slot: e.target.value });
-                                  if (errors.tutorialSession) setErrors({ ...errors, tutorialSession: undefined });
-                                }}
-                                style={{ borderColor: '#87CEEB' }}
-                              >
-                                <option value="">Select Time Slot</option>
-                                {allTimeSlots
-                                  .filter(t => {
-                                    if (t.time_slot === '12:00-12:50') return false;
-                                    const [start, end] = t.time_slot.split('-');
-                                    const startHour = parseInt(start.split(':')[0]);
-                                    const endHour = parseInt(end.split(':')[0]);
-                                    const hours = endHour - startHour >= 1 ? 2 : 1;
-                                    return hours === selectedCourse.tutorial_hours;
-                                  })
-                                  .map(t => (
-                                    <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
-                                  ))
-                                }
-                              </Form.Select>
-                            </Col>
-                          </Row>
-                          {errors.tutorialSession && (
-                            <Alert variant="danger" className="mt-2 mb-0 py-2">
-                              {errors.tutorialSession}
-                            </Alert>
-                          )}
-                        </Card.Body>
-                      </Card>
-                    )}
-
-                    {selectedCourse.lab_hours > 0 && (
-                      <Card className="mb-3 border-0 shadow-sm">
-                        <Card.Body>
-                          <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
-                            Lab (2 continuous hours)
-                          </h6>
-                          
-                          <Form.Group className="mb-3">
-                            <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
-                            <Form.Control
-                              ref={labSectionRef}
-                              type="text"
-                              placeholder="50159"
-                              value={labSection}
-                              onChange={e => {
-                                const value = e.target.value.replace(/\D/g, '');
-                                if (value.length <= 5) setLabSection(value);
-                                if (errors.labSection) setErrors({ ...errors, labSection: undefined });
-                                if (errors.general) setErrors({ ...errors, general: undefined });
-                              }}
-                              maxLength={5}
-                              style={{ maxWidth: '200px', borderColor: errors.labSection ? '#dc3545' : '#87CEEB' }}
-                              isInvalid={!!errors.labSection}
-                            />
-                            {errors.labSection && <ErrorMessage message={errors.labSection} />}
-                          </Form.Group>
-
-                          <Row className="g-2">
-                            <Col md={6}>
-                              <Form.Select
-                                value={labSession.day}
-                                onChange={e => {
-                                  setLabSession({ ...labSession, day: e.target.value });
-                                  if (errors.labSession) setErrors({ ...errors, labSession: undefined });
-                                }}
-                                style={{ borderColor: '#87CEEB' }}
-                              >
-                                <option value="">Select Day</option>
-                                {days.map(d => (
-                                  <option key={d.day} value={d.day}>{d.day}</option>
-                                ))}
-                              </Form.Select>
-                            </Col>
-                            <Col md={6}>
-                              <Form.Select
-                                value={labSession.time_slot}
-                                onChange={e => {
-                                  setLabSession({ ...labSession, time_slot: e.target.value });
-                                  if (errors.labSession) setErrors({ ...errors, labSession: undefined });
-                                }}
-                                style={{ borderColor: '#87CEEB' }}
-                              >
-                                <option value="">Select 2-Hour Block</option>
-                                {allTimeSlots
-                                  .filter(t => {
-                                    if (t.time_slot === '12:00-12:50') return false;
-                                    if (t.time_slot.includes('12:00') || t.time_slot.includes('12:50')) return false;
-                                    const [start, end] = t.time_slot.split('-');
-                                    const startHour = parseInt(start.split(':')[0]);
-                                    const endHour = parseInt(end.split(':')[0]);
-                                    return (endHour - startHour) >= 1;
-                                  })
-                                  .map(t => (
-                                    <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
-                                  ))
-                                }
-                              </Form.Select>
-                            </Col>
-                          </Row>
-                          {errors.labSession && (
-                            <Alert variant="danger" className="mt-2 mb-0 py-2">
-                              {errors.labSession}
-                            </Alert>
-                          )}
-                        </Card.Body>
-                      </Card>
-                    )}
-
-                    <div className="d-flex gap-2">
-                      <Button
-                        type="submit"
-                        className="border-0 shadow-sm"
-                        style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' }}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (editingCourse ? 'Updating...' : 'Adding...') : (editingCourse ? 'Update Course' : 'Add Course to Schedule')}
-                      </Button>
-                      {editingCourse && (
-                        <Button
-                          type="button"
-                          className="border-0"
-                          style={{ background: '#b0c4d4', color: '#1e3a5f' }}
-                          onClick={() => {
-                            handleCourseSelect('');
-                            setEditingCourse(null);
-                          }}
-                        >
-                          Cancel Edit
-                        </Button>
+                          </Card.Body>
+                        </Card>
                       )}
+
+                      {selectedCourse.lab_hours > 0 && (
+                        <Card className="mb-3 border-0 shadow-sm">
+                          <Card.Body>
+                            <h6 className="fw-semibold mb-3" style={{ color: '#1e3a5f' }}>
+                              Lab (2 continuous hours)
+                            </h6>
+                            
+                            <Form.Group className="mb-3">
+                              <Form.Label className="small fw-semibold">Section Number (5 digits)</Form.Label>
+                              <Form.Control
+                                ref={labSectionRef}
+                                type="text"
+                                placeholder="50159"
+                                value={labSection}
+                                onChange={e => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  if (value.length <= 5) setLabSection(value);
+                                  if (errors.labSection) setErrors({ ...errors, labSection: undefined });
+                                  if (errors.general) setErrors({ ...errors, general: undefined });
+                                }}
+                                maxLength={5}
+                                style={{ maxWidth: '200px', borderColor: errors.labSection ? '#dc3545' : '#87CEEB' }}
+                                isInvalid={!!errors.labSection}
+                              />
+                              {errors.labSection && <ErrorMessage message={errors.labSection} />}
+                            </Form.Group>
+
+                            <Row className="g-2">
+                              <Col md={6}>
+                                <Form.Select
+                                  value={labSession.day}
+                                  onChange={e => {
+                                    setLabSession({ ...labSession, day: e.target.value });
+                                    if (errors.labSession) setErrors({ ...errors, labSession: undefined });
+                                  }}
+                                  style={{ borderColor: '#87CEEB' }}
+                                >
+                                  <option value="">Select Day</option>
+                                  {days.map(d => (
+                                    <option key={d.day} value={d.day}>{d.day}</option>
+                                  ))}
+                                </Form.Select>
+                              </Col>
+                              <Col md={6}>
+                                <Form.Select
+                                  value={labSession.time_slot}
+                                  onChange={e => {
+                                    setLabSession({ ...labSession, time_slot: e.target.value });
+                                    if (errors.labSession) setErrors({ ...errors, labSession: undefined });
+                                  }}
+                                  style={{ borderColor: '#87CEEB' }}
+                                >
+                                  <option value="">Select 2-Hour Block</option>
+                                  {allTimeSlots
+                                    .filter(t => {
+                                      if (t.time_slot === '12:00-12:50') return false;
+                                      if (t.time_slot.includes('12:00') || t.time_slot.includes('12:50')) return false;
+                                      const [start, end] = t.time_slot.split('-');
+                                      const startHour = parseInt(start.split(':')[0]);
+                                      const endHour = parseInt(end.split(':')[0]);
+                                      return (endHour - startHour) >= 1;
+                                    })
+                                    .map(t => (
+                                      <option key={t.time_slot} value={t.time_slot}>{t.time_slot}</option>
+                                    ))
+                                  }
+                                </Form.Select>
+                              </Col>
+                            </Row>
+                            {errors.labSession && (
+                              <Alert variant="danger" className="mt-2 mb-0 py-2">
+                                {errors.labSession}
+                              </Alert>
+                            )}
+                          </Card.Body>
+                        </Card>
+                      )}
+
+                      <div className="d-flex gap-2">
+                        <Button
+                          type="submit"
+                          className="border-0 shadow-sm"
+                          style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' }}
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (editingCourse ? 'Updating...' : 'Adding...') : (editingCourse ? 'Update Course' : 'Add Course to Schedule')}
+                        </Button>
+                        {editingCourse && (
+                          <Button
+                            type="button"
+                            className="border-0"
+                            style={{ background: '#b0c4d4', color: '#1e3a5f' }}
+                            onClick={() => {
+                              handleCourseSelect('');
+                              setEditingCourse(null);
+                            }}
+                          >
+                            Cancel Edit
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </Form>
-            </Card.Body>
-          </Card>
+                  )}
+                </Form>
+              </Card.Body>
+            </Card>
+          )}
         </Container>
       </div>
     </Layout>

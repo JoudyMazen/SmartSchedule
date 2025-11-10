@@ -72,20 +72,29 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<number>(1);
+  const [availableGroups, setAvailableGroups] = useState<number[]>([]); // ✅ Start empty, will be populated
 
   const levels = [3, 4, 5, 6, 7, 8];
 
-  const getGroupsForLevel = (level: number): number[] => {
-    switch (level) {
-      case 3: return [1, 2];
-      case 4: return [1];
-      case 5: return [1, 2];
-      case 6: return [1];
-      case 7: return [1, 2];
-      case 8: return [1];
-      default: return [1];
+  // ✅ Fetch available groups from database
+ const fetchAvailableGroups = async (level: number) => {
+  try {
+    // ✅ Use the same endpoint as Faculty page
+    const response = await fetch(`/api/data/groups?level=${level}`);
+    const data = await response.json();
+    
+    if (data.success && data.groups && data.groups.length > 0) {
+      // groups is already an array of numbers: [1, 2, 3]
+      const levelGroups: number[] = data.groups || [];
+      setAvailableGroups(levelGroups);
+    } else {
+      setAvailableGroups([]);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching available groups:', error);
+    setAvailableGroups([]);
+  }
+};
 
   useEffect(() => {
     fetchTimeSlots();
@@ -93,9 +102,15 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchSchedule();
+    fetchAvailableGroups(selectedLevel);
+  }, [selectedLevel]);
+
+  useEffect(() => {
+    if (availableGroups.length > 0) {
+      fetchSchedule();
+    }
     fetchFeedbacks();
-  }, [selectedLevel, selectedVersion]);
+  }, [selectedLevel, selectedVersion, availableGroups]);
 
   useEffect(() => {
     filterScheduleData();
@@ -133,13 +148,17 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   };
 
   const fetchSchedule = async () => {
+    if (availableGroups.length === 0) {
+      setScheduleData([]);
+      return;
+    }
+
     setIsLoading(true);
     setAlert(null);
     try {
-      const groups = getGroupsForLevel(selectedLevel);
       const allSchedules: ScheduleEntry[] = [];
       
-      for (const groupNum of groups) {
+      for (const groupNum of availableGroups) {
         const response = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${groupNum}`);
         const data = await response.json();
         if (data.success && data.entries) {
@@ -150,8 +169,8 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
       setScheduleData(allSchedules);
       if (allSchedules.length === 0) {
         setAlert({
-          type: 'warning',
-          message: `No schedule entries found for Level ${selectedLevel}`
+          type: 'info',
+          message: `No schedules available for Level ${selectedLevel}. Schedules will appear here after the Scheduling Committee publishes them.`
         });
       }
     } catch (error) {
@@ -171,6 +190,63 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching feedbacks:', error);
+    }
+  };
+
+  // ✅ Approve & Publish to Faculty/Students
+  const handlePublishToTeachingLoad = async () => {
+    if (!confirm(`Approve and publish schedule for Level ${selectedLevel} to Faculty & Students? This will make the schedule visible to all users.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setAlert(null);
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      // For each group in the level, create version and publish to faculty/students
+      const results = [];
+      
+      for (const groupNum of availableGroups) {
+        const response = await fetch('/api/scheduleCommittee/publish-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            level: selectedLevel,
+            group: groupNum,
+            publish_to: 'faculty_students', // ✅ Publish to Faculty & Students (final step)
+            created_by: user.user_id
+          })
+        });
+
+        const data = await response.json();
+        results.push(data);
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.length - successCount;
+
+      if (successCount > 0) {
+        setAlert({
+          type: 'success',
+          message: `Schedule approved and published successfully to Faculty & Students for ${successCount} group(s)!${failureCount > 0 ? ` ${failureCount} group(s) failed.` : ''}`
+        });
+        await fetchSchedule();
+      } else {
+        setAlert({
+          type: 'danger',
+          message: 'Failed to publish schedule. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('Error publishing schedule:', error);
+      setAlert({
+        type: 'danger',
+        message: 'Network error occurred while publishing schedule.'
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -339,7 +415,6 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   };
 
   const renderScheduleView = () => {
-    const groups = getGroupsForLevel(selectedLevel);
     const filteredTimeSlots = timeSlots.filter(slot => {
       const [startTime, endTime] = slot.time_slot.split('-').map(t => t.trim());
       const [startHour, startMin] = startTime.split(':').map(Number);
@@ -349,13 +424,12 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
       const endTotalMin = endHour * 60 + endMin;
       const duration = endTotalMin - startTotalMin;
       
-      // Only show standard 50-minute time slots from 8:00 to 14:50
       return duration === 50 && startTotalMin >= 480 && endTotalMin <= 890;
     });
 
     return (
       <div>
-        {groups.map(groupNum => (
+        {availableGroups.map(groupNum => (
           <Card key={groupNum} className="shadow-sm mb-4 border-0 overflow-hidden">
             <Card.Header
               className="py-3"
@@ -566,6 +640,21 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
               <Card className="border-0 shadow-sm">
                 <Card.Body>
                   <div className="d-flex gap-2 flex-wrap">
+                    {/* ✅ Approve & Publish Button */}
+                    <Button
+                      className="border-0 shadow-sm"
+                      style={{
+                        background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                        color: 'white',
+                        padding: '8px 20px',
+                        fontWeight: '600'
+                      }}
+                      onClick={handlePublishToTeachingLoad}
+                      disabled={isLoading || scheduleData.length === 0}
+                    >
+                      <i className="bi bi-check-circle me-2"></i>
+                      Approve & Publish Schedule
+                    </Button>
                     <Button
                       className="border-0 shadow-sm"
                       style={{
@@ -945,4 +1034,3 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
 };
 
 export default TeachingLoadCommitteeHomePage;
-
