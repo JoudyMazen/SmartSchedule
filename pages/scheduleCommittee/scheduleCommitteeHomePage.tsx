@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Alert, Spinner, Nav, Tab, Modal, Button } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 import IrregularStudentsPage from './IrregularStudents';
@@ -18,6 +18,14 @@ const SchedulingCommitteeHomePage: React.FC = () => {
   const [showConfigureGroupsModal, setShowConfigureGroupsModal] = useState(false);
   const [showIrregularStudentsModal, setShowIrregularStudentsModal] = useState(false);
   const [feedbacks, setFeedbacks] = useState([]);
+  const [feedbackFilters, setFeedbackFilters] = useState({
+    level: '',
+    role: '',
+    feedback_type: '',
+    rating: ''
+  });
+  const [selectedFeedbacks, setSelectedFeedbacks] = useState<number[]>([]);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   // Custom hooks
   const { groups: availableGroups, refetch: refetchGroups } = useAvailableGroups(selectedLevel);
@@ -28,7 +36,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     if (router.query.refresh === 'true') {
       setRefreshCounter((c) => c + 1);
     }
-    fetchFeedbacks();
   }, [router.query.refresh]);
 
   const generateAISchedule = async () => {
@@ -163,9 +170,17 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     }
   };
 
-  const fetchFeedbacks = async () => {
+  const fetchFeedbacks = useCallback(async () => {
     try {
-      const response = await fetch('/api/scheduleCommittee/feedback');
+      // Build query parameters from filters
+      const params = new URLSearchParams();
+      if (feedbackFilters.level) params.append('level', feedbackFilters.level);
+      if (feedbackFilters.role) params.append('role', feedbackFilters.role);
+      if (feedbackFilters.feedback_type) params.append('feedback_type', feedbackFilters.feedback_type);
+      if (feedbackFilters.rating) params.append('rating', feedbackFilters.rating);
+
+      const url = `/api/scheduleCommittee/feedback${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setFeedbacks(data.feedbacks || []);
@@ -173,6 +188,110 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching feedbacks:', error);
     }
+  }, [feedbackFilters]);
+
+  useEffect(() => {
+    if (activeTab === 'feedback') {
+      fetchFeedbacks();
+    }
+    // Reset selection when tab changes or feedbacks are refetched
+    setSelectedFeedbacks([]);
+    setIsSelectionMode(false);
+  }, [feedbackFilters, activeTab, fetchFeedbacks]);
+
+  // Group feedbacks by role
+  const groupFeedbacksByRole = (feedbacks: any[]) => {
+    const grouped: { [key: string]: any[] } = {
+      faculty: [],
+      student: [],
+      teaching_load_committee: [],
+      other: []
+    };
+
+    feedbacks.forEach(feedback => {
+      const role = feedback.role || 'other';
+      if (grouped[role]) {
+        grouped[role].push(feedback);
+      } else {
+        grouped.other.push(feedback);
+      }
+    });
+
+    return grouped;
+  };
+
+  const handleSelectFeedback = (feedbackId: number) => {
+    setSelectedFeedbacks(prev => {
+      if (prev.includes(feedbackId)) {
+        return prev.filter(id => id !== feedbackId);
+      } else {
+        return [...prev, feedbackId];
+      }
+    });
+  };
+
+  const handleSelectAllInRole = (roleFeedbacks: any[]) => {
+    const roleFeedbackIds = roleFeedbacks.map(f => f.feedback_id);
+    const allSelected = roleFeedbackIds.every(id => selectedFeedbacks.includes(id));
+    
+    if (allSelected) {
+      // Deselect all in this role
+      setSelectedFeedbacks(prev => prev.filter(id => !roleFeedbackIds.includes(id)));
+    } else {
+      // Select all in this role
+      setSelectedFeedbacks(prev => {
+        const newSelection = [...prev];
+        roleFeedbackIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFeedbacks.length === feedbacks.length) {
+      setSelectedFeedbacks([]);
+    } else {
+      setSelectedFeedbacks(feedbacks.map(f => f.feedback_id));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedFeedbacks.length === 0) return;
+
+    const confirmMessage = `Are you sure you want to delete ${selectedFeedbacks.length} feedback(s)? This action cannot be undone.`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/scheduleCommittee/feedback', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback_ids: selectedFeedbacks })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showAlert('success', `Successfully deleted ${data.deletedCount} feedback(s)`);
+        setSelectedFeedbacks([]);
+        setIsSelectionMode(false);
+        fetchFeedbacks();
+      } else {
+        showAlert('danger', data.message || 'Failed to delete feedback');
+      }
+    } catch (error) {
+      console.error('Error deleting feedback:', error);
+      showAlert('danger', 'Network error occurred while deleting feedback');
+    }
+  };
+
+  const handleCancelSelection = () => {
+    setSelectedFeedbacks([]);
+    setIsSelectionMode(false);
   };
 
   const handleGroupDelete = async (groupNum: number) => {
@@ -398,59 +517,261 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                         Feedback from Faculty and Students
                       </h4>
                       
-                      {feedbacks.length > 0 ? (
-                        <div className="row g-3">
-                          {feedbacks.map((feedback: any, index: number) => (
-                            <div key={feedback.feedback_id || index} className="col-md-6 col-lg-4">
-                              <div className="card h-100 border-0 shadow-sm">
-                                <div className="card-header d-flex justify-content-between align-items-center" style={{ background: '#f8f9fa' }}>
-                                  <div>
-                                    <strong style={{ color: '#1e3a5f' }}>
-                                      {feedback.first_name} {feedback.last_name}
-                                    </strong>
-                                    <br />
-                                    <small className="text-muted">{feedback.role}</small>
-                                  </div>
-                                  <div className="text-end">
-                                    {feedback.rating && (
-                                      <div className="mb-1">
-                                        {[...Array(5)].map((_, i) => (
-                                          <i
-                                            key={i}
-                                            className={`fas fa-star${i < feedback.rating ? '' : '-o'}`}
-                                            style={{ color: i < feedback.rating ? '#ffc107' : '#dee2e6' }}
-                                          />
-                                        ))}
-                                      </div>
-                                    )}
-                                    <small className="text-muted">
-                                      {feedback.created_at ? new Date(feedback.created_at).toLocaleDateString() : 'N/A'}
-                                    </small>
-                                  </div>
-                                </div>
-                                <div className="card-body">
-                                  <div className="mb-2">
-                                    <span className="badge bg-primary me-2">{feedback.feedback_type}</span>
-                                    {feedback.level_num && (
-                                      <span className="badge bg-secondary">Level {feedback.level_num}</span>
-                                    )}
-                                  </div>
-                                  <p className="card-text">{feedback.comment}</p>
-                                  {feedback.schedule_id && (
-                                    <small className="text-muted">
-                                      Schedule ID: {feedback.schedule_id}
-                                    </small>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                      {/* Feedback Filters */}
+                      <div className="card mb-4 border-0 shadow-sm">
+                        <div className="card-body">
+                          <h6 className="mb-3" style={{ color: '#1e3a5f' }}>
+                            <i className="fas fa-filter me-2"></i>
+                            Filter Feedback
+                          </h6>
+                          <Row className="g-3">
+                            <Col md={3}>
+                              <label className="form-label small fw-semibold">Level</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={feedbackFilters.level}
+                                onChange={(e) => setFeedbackFilters({ ...feedbackFilters, level: e.target.value })}
+                              >
+                                <option value="">All Levels</option>
+                                {[3, 4, 5, 6, 7, 8].map(level => (
+                                  <option key={level} value={level}>Level {level}</option>
+                                ))}
+                              </select>
+                            </Col>
+                            <Col md={3}>
+                              <label className="form-label small fw-semibold">Role</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={feedbackFilters.role}
+                                onChange={(e) => setFeedbackFilters({ ...feedbackFilters, role: e.target.value })}
+                              >
+                                <option value="">All Roles</option>
+                                <option value="faculty">Faculty</option>
+                                <option value="student">Student</option>
+                                <option value="teaching_load_committee">Teaching Load Committee</option>
+                              </select>
+                            </Col>
+                            <Col md={3}>
+                              <label className="form-label small fw-semibold">Feedback Type</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={feedbackFilters.feedback_type}
+                                onChange={(e) => setFeedbackFilters({ ...feedbackFilters, feedback_type: e.target.value })}
+                              >
+                                <option value="">All Types</option>
+                                <option value="general">General</option>
+                                <option value="schedule">Schedule</option>
+                                <option value="course">Course</option>
+                                <option value="instructor">Instructor</option>
+                              </select>
+                            </Col>
+                            <Col md={3}>
+                              <label className="form-label small fw-semibold">Rating</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={feedbackFilters.rating}
+                                onChange={(e) => setFeedbackFilters({ ...feedbackFilters, rating: e.target.value })}
+                              >
+                                <option value="">All Ratings</option>
+                                <option value="5">5 Stars</option>
+                                <option value="4">4 Stars</option>
+                                <option value="3">3 Stars</option>
+                                <option value="2">2 Stars</option>
+                                <option value="1">1 Star</option>
+                              </select>
+                            </Col>
+                          </Row>
+                          <div className="mt-3">
+                            <button
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setFeedbackFilters({ level: '', role: '', feedback_type: '', rating: '' })}
+                            >
+                              <i className="fas fa-times me-1"></i>
+                              Clear Filters
+                            </button>
+                          </div>
                         </div>
+                      </div>
+                      
+                      {feedbacks.length > 0 ? (
+                        <>
+                          {/* Action Bar */}
+                          <div className="mb-3 d-flex justify-content-between align-items-center">
+                            <div>
+                              <small className="text-muted">
+                                Showing {feedbacks.length} feedback{feedbacks.length !== 1 ? 's' : ''}
+                                {selectedFeedbacks.length > 0 && (
+                                  <span className="ms-2 text-primary">
+                                    ({selectedFeedbacks.length} selected)
+                                  </span>
+                                )}
+                              </small>
+                            </div>
+                            <div className="d-flex" style={{ gap: '0.5rem' }}>
+                              {!isSelectionMode ? (
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={() => setIsSelectionMode(true)}
+                                >
+                                  <i className="fas fa-check-square me-1"></i>
+                                  Select Feedback
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline-success"
+                                    size="sm"
+                                    onClick={handleSelectAll}
+                                  >
+                                    <i className="fas fa-check-double me-1"></i>
+                                    Select All
+                                  </Button>
+                                  {selectedFeedbacks.length > 0 && (
+                                    <Button
+                                      variant="danger"
+                                      size="sm"
+                                      onClick={handleDeleteSelected}
+                                    >
+                                      <i className="fas fa-trash me-1"></i>
+                                      Delete ({selectedFeedbacks.length})
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    onClick={handleCancelSelection}
+                                  >
+                                    <i className="fas fa-times me-1"></i>
+                                    Cancel
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Grouped Feedback by Role */}
+                          {(() => {
+                            const grouped = groupFeedbacksByRole(feedbacks);
+                            const roleLabels: { [key: string]: string } = {
+                              faculty: 'Faculty Feedback',
+                              student: 'Student Feedback',
+                              teaching_load_committee: 'Teaching Load Committee Feedback',
+                              other: 'Other Feedback'
+                            };
+
+                            return Object.entries(grouped).map(([role, roleFeedbacks]) => {
+                              if (roleFeedbacks.length === 0) return null;
+
+                              const allInRoleSelected = roleFeedbacks.every(f => selectedFeedbacks.includes(f.feedback_id));
+                              const someInRoleSelected = roleFeedbacks.some(f => selectedFeedbacks.includes(f.feedback_id));
+
+                              return (
+                                <div key={role} className="mb-4">
+                                  <div className="card border-0 shadow-sm mb-3">
+                                    <div 
+                                      className="card-header d-flex justify-content-between align-items-center"
+                                      style={{ background: role === 'faculty' ? '#e3f2fd' : role === 'student' ? '#f3e5f5' : '#fff3e0', border: 'none' }}
+                                    >
+                                      <h5 className="mb-0" style={{ color: '#1e3a5f' }}>
+                                        <i className={`fas ${role === 'faculty' ? 'fa-chalkboard-teacher' : role === 'student' ? 'fa-user-graduate' : 'fa-users'} me-2`}></i>
+                                        {roleLabels[role]}
+                                        <span className="badge bg-secondary ms-2">{roleFeedbacks.length}</span>
+                                      </h5>
+                                      {isSelectionMode && (
+                                        <Button
+                                          variant="outline-primary"
+                                          size="sm"
+                                          onClick={() => handleSelectAllInRole(roleFeedbacks)}
+                                        >
+                                          <i className={`fas ${allInRoleSelected ? 'fa-check-square' : someInRoleSelected ? 'fa-minus-square' : 'fa-square'} me-1`}></i>
+                                          {allInRoleSelected ? 'Deselect All' : 'Select All'}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="row g-3">
+                                    {roleFeedbacks.map((feedback: any, index: number) => {
+                                      const isSelected = selectedFeedbacks.includes(feedback.feedback_id);
+                                      return (
+                                        <div key={feedback.feedback_id || index} className="col-md-6 col-lg-4">
+                                          <div 
+                                            className={`card h-100 border-0 shadow-sm ${isSelected ? 'border-primary border-2' : ''}`}
+                                            style={isSelected ? { backgroundColor: '#f0f8ff' } : {}}
+                                          >
+                                            <div className="card-header d-flex justify-content-between align-items-center" style={{ background: '#f8f9fa' }}>
+                                              <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                                                {isSelectionMode && (
+                                                  <input
+                                                    type="checkbox"
+                                                    className="form-check-input"
+                                                    checked={isSelected}
+                                                    onChange={() => handleSelectFeedback(feedback.feedback_id)}
+                                                    style={{ cursor: 'pointer', width: '18px', height: '18px', marginTop: '0' }}
+                                                  />
+                                                )}
+                                                <div>
+                                                  <strong style={{ color: '#1e3a5f' }}>
+                                                    {feedback.first_name} {feedback.last_name}
+                                                  </strong>
+                                                  <br />
+                                                  <small className="text-muted">{feedback.role}</small>
+                                                </div>
+                                              </div>
+                                              <div className="text-end">
+                                                {feedback.rating && (
+                                                  <div className="mb-1">
+                                                    {[...Array(5)].map((_, i) => (
+                                                      <i
+                                                        key={i}
+                                                        className={`fas fa-star${i < feedback.rating ? '' : '-o'}`}
+                                                        style={{ color: i < feedback.rating ? '#ffc107' : '#dee2e6', fontSize: '0.8rem' }}
+                                                      />
+                                                    ))}
+                                                  </div>
+                                                )}
+                                                <small className="text-muted">
+                                                  {feedback.created_at ? new Date(feedback.created_at).toLocaleDateString() : 'N/A'}
+                                                </small>
+                                              </div>
+                                            </div>
+                                            <div className="card-body">
+                                              <div className="mb-2">
+                                                <span className="badge bg-primary me-2">{feedback.feedback_type}</span>
+                                                {feedback.level_num && (
+                                                  <span className="badge bg-secondary">Level {feedback.level_num}</span>
+                                                )}
+                                              </div>
+                                              <p className="card-text">{feedback.comment}</p>
+                                              {feedback.schedule_id && (
+                                                <small className="text-muted">
+                                                  Schedule ID: {feedback.schedule_id}
+                                                </small>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </>
                       ) : (
                         <div className="text-center py-5">
                           <i className="fas fa-comments text-muted" style={{ fontSize: '3rem' }}></i>
-                          <h5 className="mt-3 text-muted">No feedback received yet</h5>
-                          <p className="text-muted">Feedback from faculty and students will appear here once schedules are published.</p>
+                          <h5 className="mt-3 text-muted">
+                            {Object.values(feedbackFilters).some(f => f) 
+                              ? 'No feedback found matching your filters' 
+                              : 'No feedback received yet'}
+                          </h5>
+                          <p className="text-muted">
+                            {Object.values(feedbackFilters).some(f => f)
+                              ? 'Try adjusting your filters or check back later.'
+                              : 'Feedback from faculty and students will appear here once schedules are published.'}
+                          </p>
                         </div>
                       )}
                     </div>

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Navbar, Nav, Button } from 'react-bootstrap';
 import { useRouter } from 'next/router';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import Image from 'next/image';
+import NotificationCenter from './NotificationCenter';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,27 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
+  const [user, setUser] = useState<{ user_id: number; role: string } | null>(null);
+
+  useEffect(() => {
+    // Get user from localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        if (parsedUser.user_id && parsedUser.role) {
+          const userRole = parsedUser.role.toLowerCase().trim();
+          setUser({
+            user_id: parsedUser.user_id,
+            role: userRole
+          });
+          console.log('Layout: User role detected:', userRole);
+        }
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -22,6 +44,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       href: '/scheduleCommittee/scheduleCommitteeHomePage',
       label: 'Schedules',
       icon: 'fa-calendar',
+    },
+    {
+      href: '/scheduleCommittee/dashboards',
+      label: 'Dashboard',
+      icon: 'fa-chart-bar',
     },
     {
       href: '/scheduleCommittee/scheduleCommitteeRules',
@@ -46,6 +73,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   router.pathname.includes('studentHomePage') ||
   router.pathname.includes('facultyHomePage');
 
+  // Check if we're on scheduling committee pages - ALWAYS hide notification here
+  const isSchedulingCommitteePage = router.pathname.includes('scheduleCommittee');
+
+  // Determine if notification should be shown
+  // ALWAYS hide for scheduling committee pages, regardless of user role
+  // Also hide for scheduling_committee role on other pages
+  const shouldShowNotification = !isSchedulingCommitteePage && 
+    user && 
+    user.role !== 'scheduling_committee' && 
+    user.role !== 'committee';
 
   return (
     <>
@@ -110,19 +147,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 ))}
               </Nav>
 
-              {/* Logout Button */}
-              <Button
-                onClick={handleLogout}
-                className="d-flex align-items-center border-0"
-                style={{ 
-                  background: '#87CEEB',
-                  color: '#1e3a5f',
-                  fontWeight: '600',
-                }}
-              >
-                <i className="fas fa-sign-out-alt me-2"></i>
-                Logout
-              </Button>
+              <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                {/* Notification Center - NEVER show on scheduling committee pages */}
+                {!isSchedulingCommitteePage && user && user.role !== 'scheduling_committee' && user.role !== 'committee' && (
+                  <NotificationCenter userId={user.user_id} role={user.role} />
+                )}
+
+                {/* Logout Button */}
+                <Button
+                  onClick={handleLogout}
+                  className="d-flex align-items-center border-0"
+                  style={{ 
+                    background: '#87CEEB',
+                    color: '#1e3a5f',
+                    fontWeight: '600',
+                  }}
+                >
+                  <i className="fas fa-sign-out-alt me-2"></i>
+                  Logout
+                </Button>
+              </div>
             </Navbar.Collapse>
           </Container>
         </Navbar>

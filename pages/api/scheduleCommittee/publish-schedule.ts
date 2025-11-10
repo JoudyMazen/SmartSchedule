@@ -107,6 +107,92 @@ async function createVersionSnapshot(
   }
 }
 
+// Helper function to create notifications for users when schedule is published
+async function createNotificationsForPublishedSchedule(
+  client: any,
+  level: number,
+  groupNum: number | null,
+  targetAudience: string,
+  versionNumber: number,
+  groupsText?: string
+) {
+  try {
+    // Ensure notifications table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        notification_id SERIAL PRIMARY KEY,
+        user_id INT NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        link TEXT,
+        read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Use provided groupsText or generate from groupNum
+    const groupText = groupsText || (groupNum ? `, Group ${groupNum}` : '');
+    const title = `Schedule Published - Level ${level}${groupText}`;
+    const message = `A new schedule for Level ${level}${groupText} has been published (Version ${versionNumber}). Please review and provide feedback if needed.`;
+
+    // Define role-specific links
+    const roleLinks: { [key: string]: string } = {
+      'student': `/studentHomePage?level=${level}`,
+      'faculty': `/facultyHomePage?level=${level}`,
+      'teaching_load_committee': `/teachingLoadCommittee/teachingLoadCommitteeHomePage?level=${level}`,
+      'scheduling_committee': `/scheduleCommittee/scheduleCommitteeHomePage?level=${level}`
+    };
+
+    let targetRoles: string[] = [];
+    
+    if (targetAudience === 'teaching_load') {
+      targetRoles = ['teaching_load_committee'];
+    } else if (targetAudience === 'faculty_students') {
+      targetRoles = ['faculty', 'student', 'teaching_load_committee'];
+    }
+
+    // Create notifications for all users with target roles
+    // Check for existing notifications to prevent duplicates
+    for (const role of targetRoles) {
+      const usersResult = await client.query(
+        `SELECT user_id FROM "user" WHERE role = $1`,
+        [role]
+      );
+
+      const link = roleLinks[role] || `/scheduleCommittee/scheduleCommitteeHomePage?level=${level}`;
+
+      for (const user of usersResult.rows) {
+        // Check if a similar notification already exists for this user (within last 5 minutes)
+        // This prevents duplicate notifications if the publish action is triggered multiple times
+        const existingNotification = await client.query(`
+          SELECT notification_id 
+          FROM notifications 
+          WHERE user_id = $1 
+            AND type = $2 
+            AND title = $3 
+            AND created_at > NOW() - INTERVAL '5 minutes'
+          LIMIT 1
+        `, [user.user_id, 'publish', title]);
+
+        // Only create notification if one doesn't already exist
+        if (existingNotification.rows.length === 0) {
+          await client.query(
+            `INSERT INTO notifications (user_id, type, title, message, link)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [user.user_id, 'publish', title, message, link]
+          );
+        }
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating notifications:', error);
+    return { success: false, error: 'Failed to create notifications' };
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -219,9 +305,36 @@ const newStatus = targetAudience === 'teaching_load' ? 'under_review' : 'publish
 
     const updateResult = await client.query(updateQuery, updateParams);
 
+    // ✅ STEP 4: Create notifications for published schedules
+    // Only create notifications when publishing to faculty_students or teaching_load
+    // Create ONE notification per level (not per group) to avoid duplicates
+    if (targetAudience === 'faculty_students' || targetAudience === 'teaching_load') {
+      if (schedulesToPublish.rows.length > 0 && versionResults.length > 0) {
+        // Get the highest version number from all published schedules
+        const versionNumbers = versionResults.map(v => v.version_number || 1).filter(v => v > 0);
+        const maxVersion = versionNumbers.length > 0 ? Math.max(...versionNumbers) : 1;
+        
+        // Get all group numbers that were published
+        const publishedGroups = schedulesToPublish.rows.map(s => s.group_num).sort((a, b) => a - b);
+        const groupsText = publishedGroups.length === 1 
+          ? `, Group ${publishedGroups[0]}` 
+          : ` (${publishedGroups.length} groups)`;
+        
+        // Create ONE notification per level (not per group)
+        await createNotificationsForPublishedSchedule(
+          client,
+          level,
+          null, // Pass null for groupNum to indicate all groups
+          targetAudience,
+          maxVersion,
+          groupsText
+        );
+      }
+    }
+
     await client.query('COMMIT');
 
-    // ✅ STEP 4: Return success with version info
+    // ✅ STEP 5: Return success with version info
     const audienceName = targetAudience === 'teaching_load' 
       ? 'Teaching Load Committee' 
       : 'Faculty and Students';
