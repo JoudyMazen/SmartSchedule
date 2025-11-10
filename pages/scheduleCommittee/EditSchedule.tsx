@@ -122,14 +122,17 @@ const EditSchedule: React.FC = () => {
     fetchDays();
   }, []);
 
-  // ✅ UPDATED: Fetch groups when level changes
   useEffect(() => {
-    fetchAvailableGroups(selectedLevel);
-  }, [selectedLevel]);
+  fetchSchedule();
+}, [selectedLevel, selectedGroup]);
+
 
   useEffect(() => {
-    fetchSchedule();
-  }, [selectedLevel, selectedGroup]);
+  if (selectedLevel) {
+    fetchAvailableGroups(selectedLevel);
+  }
+}, [selectedLevel]);
+
 
   useEffect(() => {
     if (!selectedLevel) return;
@@ -688,23 +691,26 @@ const EditSchedule: React.FC = () => {
                       <small className="text-muted ms-2">(No groups available)</small>
                     )}
                   </Form.Label>
-                  <Form.Select
-                    value={selectedGroup}
-                    onChange={(e) => {
-                      setSelectedGroup(parseInt(e.target.value));
-                      handleCourseSelect('');
-                    }}
-                    style={{ borderColor: '#87CEEB' }}
-                    disabled={availableGroups.length === 0}
-                  >
-                    {availableGroups.length > 0 ? (
-                      availableGroups.map(g => (
-                        <option key={g} value={g}>Group {g}</option>
-                      ))
-                    ) : (
-                      <option value="">No groups created yet</option>
-                    )}
-                  </Form.Select>
+               <Form.Select
+  value={selectedGroup}
+  onChange={(e) => {
+    setSelectedGroup(parseInt(e.target.value));
+    handleCourseSelect('');
+  }}
+  style={{ borderColor: '#87CEEB' }}
+  disabled={availableGroups.length === 0}
+>
+  {availableGroups.length > 0 ? (
+    availableGroups.map((g, index) => (
+      <option key={g} value={g}>
+        Group {index + 1}
+      </option>
+    ))
+  ) : (
+    <option value="">No groups created yet</option>
+  )}
+</Form.Select>
+
                   <small className="text-muted d-block mt-1">
                     {availableGroups.length > 0 
                       ? `${availableGroups.length} group${availableGroups.length > 1 ? 's' : ''} available`

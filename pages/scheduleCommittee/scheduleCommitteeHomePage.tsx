@@ -239,14 +239,14 @@ const SchedulingCommitteeHomePage: React.FC = () => {
         </Col>
         <Col lg={9} md={8}>
           <ActionButtons
-            onManageGroups={() => setShowConfigureGroupsModal(true)}
-            onGenerateAI={generateAISchedule}
-            onPublishToFacultyStudents={publishToFacultyStudents}
-            onPublishToTeachingLoad={publishToTeachingLoad}
-            onIrregularStudents={() => setShowIrregularStudentsModal(true)}
-            onRefresh={() => setRefreshCounter((c) => c + 1)}
-            isLoading={isLoading}
-          />
+  onManageGroups={() => setShowConfigureGroupsModal(true)}
+  onGenerateAI={generateAISchedule}
+  onPublishToFacultyStudents={publishToFacultyStudents}
+  onPublishToTeachingLoad={publishToTeachingLoad}
+  onIrregularStudents={() => setShowIrregularStudentsModal(true)}
+  onRefresh={() => setRefreshCounter((c) => c + 1)}
+  isLoading={isLoading}
+/>
         </Col>
       </Row>
 
