@@ -7,7 +7,8 @@
     "build": "next build",
     "lint": "next lint",
     "setup-db": "node scripts/setup-db.js",
-    "start": "next start -p $PORT"
+    "start": "next start -p $PORT",
+    "yjs-server": "node scripts/yjs-server.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.0.1",

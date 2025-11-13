@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Form, Table, Alert, Spinner } from 'react-bootstrap';
 import Layout from '../../components/Layout';
 import { useRouter } from 'next/router';
+import { useSharedSchedule } from '../../lib/hooks';
+import PresenceBar from '../../components/PresenceBar';
 
 interface ScheduleEntry {
   schedule_id: number;
@@ -45,8 +47,8 @@ const EditSchedule: React.FC = () => {
   const [selectedLevel, setSelectedLevel] = useState(3);
   const [selectedGroup, setSelectedGroup] = useState(1);
   const [availableGroups, setAvailableGroups] = useState<number[]>([1]); // ✅ NEW STATE
-  const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const { entries: scheduleData, syncFromServer: syncSchedule, presenceNames } = useSharedSchedule(selectedLevel, selectedGroup);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [allTimeSlots, setAllTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
@@ -123,9 +125,23 @@ const EditSchedule: React.FC = () => {
   }, []);
 
   useEffect(() => {
-  fetchSchedule();
-}, [selectedLevel, selectedGroup]);
+    let isMounted = true;
+    const loadSchedule = async () => {
+      setIsLoading(true);
+      try {
+        await syncSchedule();
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    loadSchedule();
 
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLevel, selectedGroup, syncSchedule]);
 
   useEffect(() => {
   if (selectedLevel) {
@@ -199,24 +215,6 @@ const EditSchedule: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching days:', error);
-    }
-  };
-
-  const fetchSchedule = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/data/schedule?level=${selectedLevel}&group=${selectedGroup}`);
-      const data = await response.json();
-      if (data.success && data.entries) {
-        setScheduleData(data.entries.map((s: any) => ({ ...s, group_num: selectedGroup })));
-      } else {
-        setScheduleData([]);
-      }
-    } catch (error) {
-      console.error('Error fetching schedule:', error);
-      setScheduleData([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -455,7 +453,7 @@ const EditSchedule: React.FC = () => {
           
           handleCourseSelect('');
           setEditingCourse(null);
-          await fetchSchedule();
+          await syncSchedule();
           
           setTimeout(() => {
             setAlert(null);
@@ -474,7 +472,7 @@ const EditSchedule: React.FC = () => {
         
         handleCourseSelect('');
         setEditingCourse(null);
-        await fetchSchedule();
+        await syncSchedule();
         
         setTimeout(() => {
           setAlert(null);
@@ -521,7 +519,7 @@ const EditSchedule: React.FC = () => {
           type: 'success', 
           message: `Session deleted: ${entry.course_code} - ${entry.day} at ${entry.time_slot}` 
         });
-        await fetchSchedule();
+        await syncSchedule();
         
         setTimeout(() => {
           setAlert(null);
@@ -584,7 +582,7 @@ const EditSchedule: React.FC = () => {
           type: 'success', 
           message: `All sessions for ${courseCode} deleted successfully (${sessionCount} ${sessionText} removed)` 
         });
-        await fetchSchedule();
+        await syncSchedule();
         
         setTimeout(() => {
           setAlert(null);
@@ -630,6 +628,7 @@ const EditSchedule: React.FC = () => {
     <Layout>
       <div style={{ background: '#ececec', minHeight: '100vh' }}>
         <Container className="py-4">
+          <PresenceBar names={presenceNames} />
           <div className="mb-4 d-flex justify-content-between align-items-center">
             <div>
               <h2 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>

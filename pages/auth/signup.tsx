@@ -43,7 +43,7 @@ const SignupPage: React.FC = () => {
   };
 
   const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@(student\.)?ksu\.edu\.sa$/;
     return emailRegex.test(email);
   };
 
@@ -90,11 +90,11 @@ const SignupPage: React.FC = () => {
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
     } else if (!validateEmail(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
+      newErrors.email = "Email must be @student.ksu.edu.sa or @ksu.edu.sa";
     }
 
     if (formData.phone && !validatePhone(formData.phone)) {
-      newErrors.phone = "Please enter a valid UAE phone number (e.g., 0509991234)";
+      newErrors.phone = "Please enter a valid KSA phone number (e.g., 0509991234)";
     }
 
     if (!formData.password) {
@@ -386,7 +386,7 @@ const SignupPage: React.FC = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         isInvalid={!!errors.email}
-                        placeholder="your.email@university.edu"
+                        placeholder="xxx@student.ksu.edu.sa or xxx@ksu.edu.sa"
                         className="py-2 border-2"
                         style={{ borderColor: errors.email ? undefined : '#87CEEB' }}
                       />

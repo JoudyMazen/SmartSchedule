@@ -65,13 +65,23 @@ A comprehensive academic scheduling system built with Next.js, PostgreSQL, and A
    -- Run the provided SQL schema to create tables
    ```
 
-5. Start the development server:
+5. (Optional) Start the Yjs websocket server for real-time collaboration:
+
+   ```bash
+   npm run yjs-server
+   ```
+
+   The server listens on `ws://localhost:1234` by default. You can customise it with `YJS_HOST` and `YJS_PORT`, and point the UI to the endpoint via `NEXT_PUBLIC_YJS_WS_URL`.
+
+   If you’re running over HTTPS, configure `NEXT_PUBLIC_YJS_WS_URL` (or `NEXT_PUBLIC_YJS_WS_PORT`) so all browsers connect to the same `ws://`/`wss://` endpoint.
+
+6. Start the development server:
 
    ```bash
    npm run dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
+7. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ## Database Schema
 

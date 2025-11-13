@@ -119,13 +119,13 @@ const ForgotPasswordPage: React.FC = () => {
                         <Form.Group className="mb-4">
                           <Form.Label className="fw-semibold" style={{ color: '#1e3a5f' }}>
                             <i className="fas fa-envelope me-2"></i>
-                            Email Address
+                        Email Address
                           </Form.Label>
                           <Form.Control
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your.email@university.edu"
+                            placeholder="Enter your email"
                             className="py-3 border-2"
                             style={{ borderColor: '#87CEEB' }}
                             disabled={isLoading}

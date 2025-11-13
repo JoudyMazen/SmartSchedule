@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Spinner } from 'react-bootstrap';
-import { ScheduleEntry, TimeSlot, Day, ScheduleResponse } from '../lib/types';
+import { ScheduleEntry, TimeSlot, Day } from '../lib/types';
+import { useSharedSchedule } from '../lib/hooks';
+import PresenceBar from './PresenceBar';
 
 interface Props {
   level: number;
@@ -9,10 +11,10 @@ interface Props {
 }
 
   const ScheduleTable: React.FC<Props> = ({ level, group, refreshSignal = 0 }) => {
-  const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { entries: scheduleData, syncFromServer, presenceNames } = useSharedSchedule(level, group);
 
   const filterTimeSlots = (slots: TimeSlot[]): TimeSlot[] => {
     return slots.filter(slot => {
@@ -36,14 +38,12 @@ interface Props {
     const load = async () => {
       setIsLoading(true);
       try {
-        const [tsRes, daysRes, schedRes] = await Promise.all([
+        const [tsRes, daysRes] = await Promise.all([
           fetch('/api/data/timeSlots'),
-          fetch('/api/data/days'),
-          fetch(`/api/data/schedule?level=${level}&group=${group}`)
+          fetch('/api/data/days')
         ]);
         const tsJson = await tsRes.json();
         const daysJson = await daysRes.json();
-        const schedJson = await schedRes.json();
 
         if (tsJson.success) {
           setTimeSlots(filterTimeSlots(tsJson.timeSlots));
@@ -51,23 +51,31 @@ interface Props {
         if (daysJson.success) {
           setDays(daysJson.days);
         }
-        if (schedJson.success && schedJson.entries) {
-          const normalized = (schedJson.entries as any[]).map((e: any) => ({
-            ...e,
-            group_num: e.group_num || e.group || e.grp || group,
-          }));
-          setScheduleData(normalized);
-        } else {
-          setScheduleData([]);
-        }
+
+        await syncFromServer();
       } catch (e) {
-        setScheduleData([]);
+        console.error('Failed to load schedule table data:', e);
       } finally {
         setIsLoading(false);
       }
     };
     load();
-  }, [level, group, refreshSignal]);
+  }, [level, group, syncFromServer]);
+
+  useEffect(() => {
+    if (refreshSignal === undefined) {
+      return;
+    }
+    const refresh = async () => {
+      setIsLoading(true);
+      try {
+        await syncFromServer();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    refresh();
+  }, [refreshSignal, syncFromServer]);
 
   const shouldRenderCell = (day: string, currentTimeSlot: string): { render: boolean; rowSpan: number; entry: ScheduleEntry | null } => {
     const [currentStart] = currentTimeSlot.split('-').map(t => t.trim());
@@ -102,7 +110,9 @@ interface Props {
   };
 
   return (
-    <Card className="shadow-sm mb-4 border-0 overflow-hidden">
+    <>
+      <PresenceBar names={presenceNames} />
+      <Card className="shadow-sm mb-4 border-0 overflow-hidden">
       <Card.Header
         className="py-3"
         style={{
@@ -289,6 +299,7 @@ interface Props {
         )}
       </Card.Body>
     </Card>
+    </>
   );
 };
 

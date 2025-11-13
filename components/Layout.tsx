@@ -9,9 +9,36 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+const getUserDisplayName = (userData: any): string => {
+  if (!userData) {
+    return '';
+  }
+
+  const explicitName = userData.name || userData.fullName;
+  if (explicitName && typeof explicitName === 'string' && explicitName.trim()) {
+    return explicitName.trim();
+  }
+
+  const first = userData.firstName || userData.first_name || '';
+  const last = userData.lastName || userData.last_name || '';
+  const combined = `${first} ${last}`.trim();
+  if (combined) {
+    return combined;
+  }
+
+  if (userData.email && typeof userData.email === 'string') {
+    const [localPart] = userData.email.split('@');
+    if (localPart) {
+      return localPart;
+    }
+  }
+
+  return '';
+};
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
-  const [user, setUser] = useState<{ user_id: number; role: string } | null>(null);
+  const [user, setUser] = useState<{ user_id: number; role: string; displayName?: string } | null>(null);
 
   useEffect(() => {
     // Get user from localStorage
@@ -23,7 +50,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           const userRole = parsedUser.role.toLowerCase().trim();
           setUser({
             user_id: parsedUser.user_id,
-            role: userRole
+            role: userRole,
+            displayName: getUserDisplayName(parsedUser),
           });
           console.log('Layout: User role detected:', userRole);
         }
@@ -148,6 +176,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </Nav>
 
               <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                {user?.displayName && (
+                  <span
+                    className="d-flex align-items-center"
+                    style={{ color: 'white', fontWeight: 500, gap: '0.35rem' }}
+                  >
+                    <span role="img" aria-label="User">
+                      👤
+                    </span>
+                    <span>{user.displayName}</span>
+                  </span>
+                )}
+
                 {/* Notification Center - NEVER show on scheduling committee pages */}
                 {!isSchedulingCommitteePage && user && user.role !== 'scheduling_committee' && user.role !== 'committee' && (
                   <NotificationCenter userId={user.user_id} role={user.role} />
