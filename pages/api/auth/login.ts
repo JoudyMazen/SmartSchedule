@@ -16,6 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const result = await authenticateUser(email, password);
 
   if (result.success) {
+    // Set token in HTTP-only cookie for middleware authentication
+    res.setHeader('Set-Cookie', `token=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`); // 7 days
     return res.status(200).json(result);
   } else {
     return res.status(401).json(result);

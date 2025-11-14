@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createUser } from '../../../lib/auth';
+import { createUser, generateToken } from '../../../lib/auth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -51,8 +51,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const result = await createUser(firstName, lastName, email, phone || '', password, role);
 
-    if (result.success) {
-      return res.status(201).json(result);
+    if (result.success && result.user) {
+      // Generate token for the new user
+      const token = generateToken(result.user);
+      
+      // Set token in HTTP-only cookie for middleware authentication
+      res.setHeader('Set-Cookie', `token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`); // 7 days
+      
+      return res.status(201).json({
+        ...result,
+        token
+      });
     } else {
       return res.status(400).json(result);
     }

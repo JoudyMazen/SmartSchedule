@@ -62,8 +62,10 @@ const LoginPage: React.FC = () => {
         localStorage.setItem('token', data.token);
         setUser(data.user);
         
-        const dashboardPath = getRoleDashboard(data.user.role);
-        router.push(dashboardPath);
+        // Check if there's a redirect parameter
+        const redirect = router.query.redirect as string;
+        const destination = redirect || getRoleDashboard(data.user.role);
+        router.push(destination);
       } else {
         setError(data.message || 'Login failed');
       }

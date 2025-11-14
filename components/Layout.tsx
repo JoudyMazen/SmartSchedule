@@ -48,7 +48,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     // return cleanup;
   }, [router]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Clear cookie via API
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+    
     localStorage.removeItem('token');
     clearUser(); // Use user-state module to clear user
     router.push('/');
