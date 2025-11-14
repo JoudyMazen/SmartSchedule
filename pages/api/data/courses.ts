@@ -7,11 +7,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
-  const { level, excludeSWE, schedule_id } = req.query;
+  const { level, excludeSWE, schedule_id, is_elective } = req.query;
 
   const client = await pool.connect();
   
   try {
+    // If is_elective=true is requested, return only elective courses
+    if (is_elective === 'true') {
+      let electiveQuery = `
+        SELECT course_code, course_name, level, is_elective, credits,
+               lecture_hours, tutorial_hours, lab_hours
+        FROM course
+        WHERE is_elective = true
+      `;
+      
+      const electiveParams: any[] = [];
+      let paramIndex = 1;
+      
+      // Filter by level if provided
+      if (level) {
+        electiveQuery += ` AND level = $${paramIndex}`;
+        electiveParams.push(parseInt(level as string));
+        paramIndex++;
+      }
+      
+      if (excludeSWE === 'true') {
+        electiveQuery += ` AND course_code NOT LIKE 'SWE%'`;
+      }
+
+      // Exclude courses already scheduled
+      if (schedule_id) {
+        electiveQuery += ` AND course_code NOT IN (
+          SELECT DISTINCT course_code 
+          FROM contain 
+          WHERE schedule_id = $${paramIndex}
+        )`;
+        electiveParams.push(schedule_id);
+      }
+
+      const electivesResult = await client.query(electiveQuery, electiveParams);
+      client.release();
+      
+      return res.status(200).json({
+        success: true,
+        courses: electivesResult.rows
+      });
+    }
+
     // First, get all courses for the requested level (required courses)
     let query = `
       SELECT course_code, course_name, level, is_elective, credits,

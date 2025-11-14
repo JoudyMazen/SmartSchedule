@@ -25,9 +25,13 @@ interface ElectiveCourse {
   level: number;
   is_elective: boolean;
   credits: number;
-  lecture_hours: number;
-  tutorial_hours: number;
-  lab_hours: number;
+  lecture?: boolean;
+  tutorial?: boolean;
+  lab?: boolean;
+  // For backward compatibility
+  lecture_hours?: number;
+  tutorial_hours?: number;
+  lab_hours?: number;
 }
 
 interface StudentPreference {
@@ -92,6 +96,7 @@ const StudentHomePage: React.FC = () => {
   const [selectedElectives, setSelectedElectives] = useState<string[]>([]);
   const [showElectiveModal, setShowElectiveModal] = useState(false);
   const [isSubmittingElectives, setIsSubmittingElectives] = useState(false);
+  const [isLoadingElectives, setIsLoadingElectives] = useState(false);
 
   // Feedback states
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
@@ -135,6 +140,17 @@ const StudentHomePage: React.FC = () => {
       fetchMyElectivePreferences();
     }
   }, [selectedLevel, selectedGroup, student]);
+
+  // Fetch elective courses when modal opens to ensure fresh data
+  useEffect(() => {
+    if (showElectiveModal) {
+      console.log('[Frontend] Modal opened, fetching elective courses for level:', selectedLevel);
+      fetchElectiveCourses();
+    } else {
+      // Reset when modal closes
+      setElectiveCourses([]);
+    }
+  }, [showElectiveModal, selectedLevel]);
 
   useEffect(() => {
     filterScheduleData();
@@ -184,14 +200,41 @@ const StudentHomePage: React.FC = () => {
   };
 
   const fetchElectiveCourses = async () => {
+    setIsLoadingElectives(true);
     try {
-      const response = await fetch(`/api/data/courses?is_elective=true&level=${selectedLevel}`);
+      console.log(`[Frontend] Fetching elective courses for Level ${selectedLevel}...`);
+      const url = `/api/student/electives?level=${selectedLevel}`;
+      console.log(`[Frontend] API URL: ${url}`);
+      
+      const response = await fetch(url);
+      console.log(`[Frontend] Response status: ${response.status} ${response.statusText}`);
+      
+      if (!response.ok) {
+        console.error(`[Frontend] API error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[Frontend] Error response:`, errorText);
+        setElectiveCourses([]);
+        setIsLoadingElectives(false);
+        return;
+      }
+      
       const data = await response.json();
+      console.log('[Frontend] API response data:', JSON.stringify(data, null, 2));
+      
       if (data.success) {
-        setElectiveCourses(data.courses || []);
+        const courses = data.courses || [];
+        console.log(`[Frontend] Successfully fetched ${courses.length} elective courses for Level ${selectedLevel}`);
+        console.log('[Frontend] Courses data:', courses);
+        setElectiveCourses(courses);
+      } else {
+        console.error('[Frontend] API returned success=false:', data.error);
+        setElectiveCourses([]);
       }
     } catch (error) {
-      console.error('Error fetching elective courses:', error);
+      console.error('[Frontend] Exception fetching elective courses:', error);
+      setElectiveCourses([]);
+    } finally {
+      setIsLoadingElectives(false);
     }
   };
 
@@ -893,7 +936,11 @@ const StudentHomePage: React.FC = () => {
                                 {course.credits} credits
                               </small>
                               <small className="text-muted">
-                                {course.lecture_hours}L + {course.tutorial_hours}T + {course.lab_hours}Lab
+                                {[
+                                  course.lecture ? 'L' : '',
+                                  course.tutorial ? 'T' : '',
+                                  course.lab ? 'Lab' : ''
+                                ].filter(Boolean).join(' + ') || 'N/A'}
                               </small>
                             </div>
                           </Card.Body>
@@ -1008,28 +1055,42 @@ const StudentHomePage: React.FC = () => {
           <p className="text-muted mb-3">
             Select your preferred elective courses for Level {selectedLevel}. You can choose multiple courses.
           </p>
-          <ListGroup>
-            {electiveCourses.map((course) => (
-              <ListGroup.Item key={course.course_code} className="d-flex justify-content-between align-items-center">
-                <div>
-                  <div className="fw-bold">{course.course_code}</div>
-                  <div className="text-muted small">{course.course_name}</div>
-                  <div className="text-muted small">
-                    {course.credits} credits • {course.lecture_hours}L + {course.tutorial_hours}T + {course.lab_hours}Lab
-                  </div>
-                </div>
-                <Form.Check
-                  type="checkbox"
-                  checked={selectedElectives.includes(course.course_code)}
-                  onChange={(e) => handleElectiveSelection(course.course_code, e.target.checked)}
-                />
-              </ListGroup.Item>
-            ))}
-          </ListGroup>
-          {electiveCourses.length === 0 && (
+          {isLoadingElectives ? (
             <div className="text-center py-4">
-              <p className="text-muted">No elective courses available for Level {selectedLevel}</p>
+              <Spinner animation="border" style={{ color: '#1e3a5f' }} />
+              <p className="mt-3 text-muted">Loading elective courses...</p>
             </div>
+          ) : (
+            <>
+              <ListGroup>
+                {electiveCourses.map((course) => (
+                  <ListGroup.Item key={course.course_code} className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <div className="fw-bold">{course.course_code}</div>
+                      <div className="text-muted small">{course.course_name}</div>
+                      <div className="text-muted small">
+                        {course.credits} credits • {[
+                          course.lecture ? 'L' : '',
+                          course.tutorial ? 'T' : '',
+                          course.lab ? 'Lab' : ''
+                        ].filter(Boolean).join(' + ') || 'N/A'}
+                      </div>
+                    </div>
+                    <Form.Check
+                      type="checkbox"
+                      checked={selectedElectives.includes(course.course_code)}
+                      onChange={(e) => handleElectiveSelection(course.course_code, e.target.checked)}
+                    />
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
+              {electiveCourses.length === 0 && !isLoadingElectives && (
+                <div className="text-center py-4">
+                  <p className="text-muted">No elective courses available for Level {selectedLevel}</p>
+                  <small className="text-muted">Please check back later or contact your academic advisor.</small>
+                </div>
+              )}
+            </>
           )}
         </Modal.Body>
         <Modal.Footer>
