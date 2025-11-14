@@ -5,7 +5,8 @@
       "start": "y-websocket --port $PORT"
     },
     "dependencies": {
-      "y-websocket": "^1.5.4"
+      "y-websocket": "^1.5.4",
+      "yjs": "^13.6.0"
     }
   }
   
