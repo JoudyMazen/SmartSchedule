@@ -188,8 +188,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   </span>
                 )}
 
-                {/* Notification Center - NEVER show on scheduling committee pages */}
-                {!isSchedulingCommitteePage && user && user.role !== 'scheduling_committee' && user.role !== 'committee' && (
+                {/* Notification Center - Show for all users including scheduling committee */}
+                {user && (
                   <NotificationCenter userId={user.user_id} role={user.role} />
                 )}
 

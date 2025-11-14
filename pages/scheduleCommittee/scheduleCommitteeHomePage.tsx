@@ -10,6 +10,11 @@ import VersionHistory from '../../components/VersionHistory';
 import { useRouter } from 'next/router';
 import { useAvailableGroups, useAlert, useLoading } from '../../lib/hooks';
 
+// Hard-coded deadline dates for schedule submission
+const DEADLINE_INITIAL_SUBMISSION_TO_TEACHING_LOAD = new Date('2025-11-18'); // Deadline for initial version submission to teaching load
+const DEADLINE_PUBLISH_TO_FACULTY_STUDENTS = new Date('2025-11-18'); // Deadline for publishing to faculty and students
+const DEADLINE_FINAL_VERSION_SUBMISSION = new Date('2025-11-18'); // Deadline for final version submission
+
 const SchedulingCommitteeHomePage: React.FC = () => {
   const router = useRouter();
   const [selectedLevel, setSelectedLevel] = useState(3);
@@ -37,6 +42,33 @@ const SchedulingCommitteeHomePage: React.FC = () => {
       setRefreshCounter((c) => c + 1);
     }
   }, [router.query.refresh]);
+
+  // Check for deadline reminders on page load
+  useEffect(() => {
+    const checkDeadlineReminders = async () => {
+      try {
+        const response = await fetch('/api/scheduleCommittee/deadline-reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        if (data.success && data.notificationsSent > 0) {
+          // Silently check - notifications will appear in notification center
+          console.log(`Deadline reminders sent: ${data.notificationsSent}`);
+        }
+      } catch (error) {
+        console.error('Error checking deadline reminders:', error);
+      }
+    };
+
+    // Check on initial load
+    checkDeadlineReminders();
+    
+    // Also check every hour to catch reminders throughout the day
+    const interval = setInterval(checkDeadlineReminders, 60 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const generateAISchedule = async () => {
     if (!confirm(`Generate AI schedule for Level ${selectedLevel}? This will create optimized schedules for all groups.`)) {
@@ -402,6 +434,85 @@ const SchedulingCommitteeHomePage: React.FC = () => {
             <p className="text-muted mb-0 schedule-committee-subtitle">
               Manage schedules, view feedback, and track version history
             </p>
+          </div>
+
+          {/* Schedule Submission Deadlines */}
+          <div className="mb-4">
+            <h4 className="fw-bold mb-3" style={{ color: '#1e3a5f' }}>
+              <i className="fas fa-calendar-times me-2"></i>
+              Schedule Submission Deadlines
+            </h4>
+            <Row className="g-3">
+                <Col md={4}>
+                  <div className="d-flex align-items-center">
+                    <div className="me-3" style={{ fontSize: '2rem', color: '#ff9800' }}>
+                      <i className="fas fa-flag"></i>
+                    </div>
+                    <div>
+                      <h6 className="mb-1 fw-bold" style={{ color: '#1e3a5f' }}>
+                        Initial Version Submission
+                      </h6>
+                      <p className="mb-0 text-muted small">
+                        Submit to Teaching Load Committee
+                      </p>
+                      <p className="mb-0 fw-bold" style={{ color: '#ff9800', fontSize: '1.1rem' }}>
+                        <i className="fas fa-clock me-1"></i>
+                        {DEADLINE_INITIAL_SUBMISSION_TO_TEACHING_LOAD.toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="d-flex align-items-center">
+                    <div className="me-3" style={{ fontSize: '2rem', color: '#ff9800' }}>
+                      <i className="fas fa-bullhorn"></i>
+                    </div>
+                    <div>
+                      <h6 className="mb-1 fw-bold" style={{ color: '#1e3a5f' }}>
+                        Publish to Faculty & Students
+                      </h6>
+                      <p className="mb-0 text-muted small">
+                        Make schedule visible to all users
+                      </p>
+                      <p className="mb-0 fw-bold" style={{ color: '#ff9800', fontSize: '1.1rem' }}>
+                        <i className="fas fa-clock me-1"></i>
+                        {DEADLINE_PUBLISH_TO_FACULTY_STUDENTS.toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="d-flex align-items-center">
+                    <div className="me-3" style={{ fontSize: '2rem', color: '#ff9800' }}>
+                      <i className="fas fa-check-circle"></i>
+                    </div>
+                    <div>
+                      <h6 className="mb-1 fw-bold" style={{ color: '#1e3a5f' }}>
+                        Final Version Submission
+                      </h6>
+                      <p className="mb-0 text-muted small">
+                        Submit final approved schedule
+                      </p>
+                      <p className="mb-0 fw-bold" style={{ color: '#ff9800', fontSize: '1.1rem' }}>
+                        <i className="fas fa-clock me-1"></i>
+                        {DEADLINE_FINAL_VERSION_SUBMISSION.toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
           </div>
 
           {alert && (

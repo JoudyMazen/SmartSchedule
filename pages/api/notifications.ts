@@ -41,8 +41,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const params: any[] = [user_id];
 
       if (userRole === 'scheduling_committee') {
-        // Exclude publish notifications for scheduling committee
+        // Exclude publish notifications for scheduling committee, but allow deadline_reminder
         query += ` AND NOT (type = 'publish' AND title LIKE 'Schedule Published%')`;
+        // Allow deadline_reminder notifications to show for scheduling committee
       }
 
       query += ` ORDER BY created_at DESC LIMIT 50`;

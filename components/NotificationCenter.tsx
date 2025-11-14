@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 
 interface Notification {
   id: string;
-  type: 'comment' | 'update' | 'publish' | 'version' | 'feedback';
+  type: 'comment' | 'update' | 'publish' | 'version' | 'feedback' | 'deadline_reminder';
   title: string;
   message: string;
   timestamp: Date;
@@ -109,6 +109,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, role })
         return '📢';
       case 'version':
         return '📝';
+      case 'deadline_reminder':
+        return '⏰';
       default:
         return '🔔';
     }

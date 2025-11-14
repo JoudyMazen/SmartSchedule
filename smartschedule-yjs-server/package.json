@@ -1,0 +1,10 @@
+{
+  "name": "smartschedule-yjs-server",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "y-websocket --port 1234"
+  },
+  "dependencies": {
+    "y-websocket": "^1.5.4"
+  }
+}
