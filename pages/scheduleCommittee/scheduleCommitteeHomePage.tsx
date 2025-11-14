@@ -954,6 +954,7 @@ import GroupManagerModal from '../../components/GroupManagerModal';
 import VersionHistory from '../../components/VersionHistory';
 import { useRouter } from 'next/router';
 import { useAvailableGroups, useAlert, useLoading } from '../../lib/hooks';
+import { getUser } from '../../lib/user-state';
 
 // If these are defined elsewhere, keep your original imports.
 // import { DEADLINE_INITIAL_SUBMISSION_TO_TEACHING_LOAD, DEADLINE_PUBLISH_TO_FACULTY_STUDENTS, DEADLINE_FINAL_VERSION_SUBMISSION } from '...';
@@ -1117,7 +1118,13 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     clearAlert();
 
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = getUser();
+      if (!user?.user_id) {
+        showAlert('danger', 'User not found. Please login again.');
+        return;
+      }
+
+      const userId = user.user_id;
 
       const response = await fetch('/api/scheduleCommittee/publish-schedule', {
         method: 'POST',
@@ -1125,7 +1132,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
         body: JSON.stringify({
           level: selectedLevel,
           publish_to: 'faculty_students',
-          created_by: user.user_id
+          created_by: userId
         })
       });
 
@@ -1162,7 +1169,13 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     clearAlert();
 
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = getUser();
+      if (!user?.user_id) {
+        showAlert('danger', 'User not found. Please login again.');
+        return;
+      }
+
+      const userId = user.user_id;
 
       const response = await fetch('/api/scheduleCommittee/publish-schedule', {
         method: 'POST',
@@ -1170,7 +1183,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
         body: JSON.stringify({
           level: selectedLevel,
           publish_to: 'teaching_load',
-          created_by: user.user_id
+          created_by: userId
         })
       });
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { GroupsResponse, AlertState, ScheduleEntry, ScheduleResponse } from './types';
+import { getUser, getUserDisplayName, getUserIdForPresence } from './user-state';
 
 // Hook for fetching available groups for a level
 export const useAvailableGroups = (level: number) => {
@@ -66,39 +67,7 @@ interface SharedScheduleState {
   presenceNames: string[];
 }
 
-const getLocalUserName = (): string => {
-  if (typeof window === 'undefined') {
-    return 'Unknown';
-  }
-  try {
-    const stored = localStorage.getItem('user');
-    if (!stored) {
-      return 'Anonymous';
-    }
-    const parsed = JSON.parse(stored);
-    const first = parsed.firstName || parsed.first_name || '';
-    const last = parsed.lastName || parsed.last_name || '';
-    const explicitName = parsed.name || parsed.fullName;
-    const email = parsed.email;
-    const combined = `${first} ${last}`.trim();
-    if (explicitName && typeof explicitName === 'string' && explicitName.trim().length > 0) {
-      return explicitName.trim();
-    }
-    if (combined.length > 0) {
-      return combined;
-    }
-    if (email && typeof email === 'string') {
-      const [localPart] = email.split('@');
-      if (localPart) {
-        return localPart;
-      }
-    }
-    return 'Anonymous';
-  } catch (error) {
-    console.warn('Failed to parse local user for presence', error);
-    return 'Anonymous';
-  }
-};
+// Removed - using getUserDisplayName from user-state.ts instead
 
 const resolveBrowserWsUrl = () => {
   if (typeof window === 'undefined') {
@@ -142,7 +111,6 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
   const [isSynced, setIsSynced] = useState(false);
   const [presenceNames, setPresenceNames] = useState<string[]>([]);
 
-  const localUserNameRef = useRef<string>(getLocalUserName());
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const stateMapRef = useRef<Y.Map<any> | null>(null);
@@ -200,21 +168,54 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
     docRef.current = doc;
     providerRef.current = provider;
     stateMapRef.current = stateMap;
-    const localUserName = localUserNameRef.current;
-    awareness.setLocalStateField('user', { name: localUserName });
+    
+    // Use user_id-based identity for Y.js presence to avoid conflicts
+    // Get fresh user data each time (not from ref) to handle tab changes
+    const getUserForPresence = () => {
+      const currentUser = getUser();
+      const currentUserId = getUserIdForPresence();
+      const currentUserName = currentUser ? getUserDisplayName(currentUser) : 'Anonymous';
+      return { user: currentUser, userId: currentUserId, userName: currentUserName };
+    };
+    
+    const { user, userId, userName } = getUserForPresence();
+    
+    // Store both user_id (unique) and name (display) in awareness
+    awareness.setLocalStateField('user', { 
+      id: userId,
+      name: userName,
+      user_id: user?.user_id || null
+    });
 
     const updatePresenceNames = () => {
       const states = Array.from(awareness.getStates().values());
-      const names = states
-        .map((state: any) => state?.user?.name)
-        .filter((name: any): name is string => Boolean(name && typeof name === 'string'))
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0);
-
-      const uniqueNames = Array.from(new Set(names));
-      if (localUserName && !uniqueNames.includes(localUserName)) {
-        uniqueNames.unshift(localUserName);
+      // Use user_id to deduplicate (same user in multiple tabs = one entry)
+      const userMap = new Map<string, string>();
+      
+      states.forEach((state: any) => {
+        const userId = state?.user?.id || state?.user?.user_id;
+        const userName = state?.user?.name;
+        
+        if (userId && userName && typeof userName === 'string') {
+          const trimmed = userName.trim();
+          if (trimmed.length > 0) {
+            // Use user_id as key to avoid duplicates
+            if (!userMap.has(userId)) {
+              userMap.set(userId, trimmed);
+            }
+          }
+        }
+      });
+      
+      const uniqueNames = Array.from(userMap.values());
+      // Add current user if not already in list
+      const currentUser = getUser();
+      const currentUserId = getUserIdForPresence();
+      const currentUserName = currentUser ? getUserDisplayName(currentUser) : 'Anonymous';
+      if (currentUserName && !userMap.has(currentUserId)) {
+        uniqueNames.unshift(currentUserName);
       }
+      
       setPresenceNames(uniqueNames);
     };
 

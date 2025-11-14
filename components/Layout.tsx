@@ -4,66 +4,53 @@ import { useRouter } from 'next/router';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import Image from 'next/image';
 import NotificationCenter from './NotificationCenter';
+import { getUser, getUserDisplayName, onUserChange, clearUser } from '../lib/user-state';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
-
-const getUserDisplayName = (userData: any): string => {
-  if (!userData) {
-    return '';
-  }
-
-  const explicitName = userData.name || userData.fullName;
-  if (explicitName && typeof explicitName === 'string' && explicitName.trim()) {
-    return explicitName.trim();
-  }
-
-  const first = userData.firstName || userData.first_name || '';
-  const last = userData.lastName || userData.last_name || '';
-  const combined = `${first} ${last}`.trim();
-  if (combined) {
-    return combined;
-  }
-
-  if (userData.email && typeof userData.email === 'string') {
-    const [localPart] = userData.email.split('@');
-    if (localPart) {
-      return localPart;
-    }
-  }
-
-  return '';
-};
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
   const [user, setUser] = useState<{ user_id: number; role: string; displayName?: string } | null>(null);
 
   useEffect(() => {
-    // Get user from localStorage
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        if (parsedUser.user_id && parsedUser.role) {
-          const userRole = parsedUser.role.toLowerCase().trim();
-          setUser({
-            user_id: parsedUser.user_id,
-            role: userRole,
-            displayName: getUserDisplayName(parsedUser),
-          });
-          console.log('Layout: User role detected:', userRole);
-        }
-      } catch (error) {
-        console.error('Error parsing user data:', error);
-      }
+    // Get user from user-state module (handles tab isolation)
+    const currentUser = getUser();
+    if (currentUser && currentUser.user_id && currentUser.role) {
+      const userRole = currentUser.role.toLowerCase().trim();
+      setUser({
+        user_id: currentUser.user_id,
+        role: userRole,
+        displayName: getUserDisplayName(currentUser),
+      });
     }
-  }, []);
+    
+    // Don't listen to storage events from other tabs
+    // Each tab should maintain its own user independently
+    // The onUserChange handler is disabled to prevent cross-tab user overwrites
+    // If you want tabs to sync on logout only, you can uncomment below:
+    
+    // const cleanup = onUserChange((user) => {
+    //   // Only update if current tab has no user
+    //   // This prevents one user from overwriting another
+    //   const currentUser = getUser();
+    //   if (!currentUser && user && user.user_id && user.role) {
+    //     const userRole = user.role.toLowerCase().trim();
+    //     setUser({
+    //       user_id: user.user_id,
+    //       role: userRole,
+    //       displayName: getUserDisplayName(user),
+    //     });
+    //   }
+    // });
+    
+    // return cleanup;
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearUser(); // Use user-state module to clear user
     router.push('/');
   };
 

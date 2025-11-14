@@ -164,8 +164,10 @@ const SignupPage: React.FC = () => {
       }
 
       if (data.success) {
+        // Use user-state module for proper tab isolation
+        const { setUser } = await import('../../lib/user-state');
         localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        setUser(data.user);
         
         const dashboardPath = getRoleDashboard(formData.role);
         router.push(dashboardPath);
