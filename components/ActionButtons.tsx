@@ -9,7 +9,6 @@ interface ActionButtonsProps {
   onPublishToTeachingLoad?: () => void;     // ✅ NEW
   onPublishSchedule?: () => void;           // Keep for backward compatibility
   onIrregularStudents: () => void;
-  onViewElectiveSurvey?: () => void;        // ✅ NEW: View Elective Survey Results
   onRefresh: () => void;
   isLoading: boolean;
 }
@@ -21,7 +20,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
   onPublishToTeachingLoad,
   onPublishSchedule,
   onIrregularStudents,
-  onViewElectiveSurvey,
   onRefresh,
   isLoading
 }) => {
@@ -127,19 +125,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
             <i className="bi bi-person-exclamation me-2"></i>
             Irregular Students
           </Button>
-
-          {/* View Elective Survey Results */}
-          {onViewElectiveSurvey && (
-            <Button
-              className="border-0 shadow-sm"
-              style={buttonStyle}
-              onClick={onViewElectiveSurvey}
-              disabled={isLoading}
-            >
-              <i className="bi bi-clipboard-data me-2"></i>
-              View Elective Survey Results
-            </Button>
-          )}
 
           {/* Refresh */}
           <Button

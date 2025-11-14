@@ -66,10 +66,3 @@ export interface Comment {
   authorRole: string;
   createdAt: number;
 }
-
-export interface ElectiveSurveyResult {
-  electiveCode: string;
-  electiveName: string;
-  level: number;
-  studentsCount: number;
-}

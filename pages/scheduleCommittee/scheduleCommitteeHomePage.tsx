@@ -952,7 +952,6 @@ import LevelSelector from '../../components/LevelSelector';
 import ActionButtons from '../../components/ActionButtons';
 import GroupManagerModal from '../../components/GroupManagerModal';
 import VersionHistory from '../../components/VersionHistory';
-import ElectiveSurveyResultsModal from '../../components/ElectiveSurveyResultsModal';
 import { useRouter } from 'next/router';
 import { useAvailableGroups, useAlert, useLoading } from '../../lib/hooks';
 import { getUser } from '../../lib/user-state';
@@ -990,7 +989,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'schedule' | 'feedback' | 'versions'>('schedule');
   const [showConfigureGroupsModal, setShowConfigureGroupsModal] = useState(false);
   const [showIrregularStudentsModal, setShowIrregularStudentsModal] = useState(false);
-  const [showElectiveSurveyModal, setShowElectiveSurveyModal] = useState(false);
 
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [feedbackFilters, setFeedbackFilters] = useState<FeedbackFilters>({
@@ -1405,7 +1403,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
             onPublishToFacultyStudents={publishToFacultyStudents}
             onPublishToTeachingLoad={publishToTeachingLoad}
             onIrregularStudents={() => setShowIrregularStudentsModal(true)}
-            onViewElectiveSurvey={() => setShowElectiveSurveyModal(true)}
             onRefresh={() => setRefreshCounter((c) => c + 1)}
             isLoading={isLoading}
           />
@@ -1613,12 +1610,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
             <IrregularStudentsPage />
           </Modal.Body>
         </Modal>
-
-        {/* Elective Survey Results Modal */}
-        <ElectiveSurveyResultsModal
-          isOpen={showElectiveSurveyModal}
-          onClose={() => setShowElectiveSurveyModal(false)}
-        />
       </div>
     </Layout>
   );
