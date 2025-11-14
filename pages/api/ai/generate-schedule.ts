@@ -54,12 +54,16 @@ function validateExactRequirements(courses: Course[]): ExactCourseRequirement[] 
     const exactReqs: ExactCourseRequirement[] = [];
     
     for (const course of courses) {
+      // For 2-hour courses, schedule as 1 continuous 2-hour lecture
+      // For other courses, use the standard calculation
+      const required_lectures = course.lecture_hours === 2 ? 1 : Math.ceil(course.lecture_hours);
+      
       const req: ExactCourseRequirement = {
         course_code: course.course_code,
         course_name: course.course_name,
-        required_lectures: Math.ceil(course.lecture_hours),
+        required_lectures: required_lectures,
         required_tutorials: Math.ceil(course.tutorial_hours),
-        required_labs: calculateLabSessions(course.lab_hours),
+        required_labs: calculateLabSessions(course.lab_hours, course.course_code),
         total_sessions: 0
       };
       
@@ -72,17 +76,62 @@ function validateExactRequirements(courses: Course[]): ExactCourseRequirement[] 
     return exactReqs;
   }
   
-  function calculateLabSessions(labHours: number): number {
+  function calculateLabSessions(labHours: number, courseCode?: string): number {
     if (labHours === 0) return 0;
     if (labHours === 1) return 1;
-    if (labHours === 2) return 1;
+    // For SWE444 or any 2-hour lab course, schedule 2 sessions per week (each 2 hours)
+    if (labHours === 2 && courseCode === "SWE444") return 2;
+    if (labHours === 2) return 1; // Other 2-hour labs: 1 session
     if (labHours === 3) return 2;
     if (labHours === 4) return 2;
     return Math.ceil(labHours / 2);
   }
   
+  // Function to remove extra sessions beyond required counts
+  function enforceExactSessionCounts(
+    generated: ScheduleAssignment[],
+    exactReqs: ExactCourseRequirement[]
+  ): ScheduleAssignment[] {
+    const enforced: ScheduleAssignment[] = [];
+    const sessionCounts = new Map<string, { lectures: number; tutorials: number; labs: number }>();
+    
+    // Initialize counts
+    for (const req of exactReqs) {
+      sessionCounts.set(req.course_code, { lectures: 0, tutorials: 0, labs: 0 });
+    }
+    
+    // Process assignments and enforce limits
+    for (const assignment of generated) {
+      const req = exactReqs.find(r => r.course_code === assignment.course_code);
+      if (!req) continue; // Skip courses not in requirements
+      
+      const counts = sessionCounts.get(assignment.course_code)!;
+      let shouldAdd = false;
+      
+      if (assignment.activity_type === "Lecture" && counts.lectures < req.required_lectures) {
+        counts.lectures++;
+        shouldAdd = true;
+      } else if (assignment.activity_type === "Tutorial" && counts.tutorials < req.required_tutorials) {
+        counts.tutorials++;
+        shouldAdd = true;
+      } else if (assignment.activity_type === "Lab" && counts.labs < req.required_labs) {
+        counts.labs++;
+        shouldAdd = true;
+      }
+      
+      if (shouldAdd) {
+        enforced.push(assignment);
+      } else {
+        // Log when we skip an extra session
+        console.log(`⚠️ Removing extra ${assignment.activity_type} session for ${assignment.course_code} (already have ${counts.lectures}L/${counts.tutorials}T/${counts.labs}Lab, need ${req.required_lectures}L/${req.required_tutorials}T/${req.required_labs}Lab)`);
+      }
+    }
+    
+    return enforced;
+  }
+
   function validateGeneratedSessions(
-    generated: ScheduleAssignment[], 
+    generated: ScheduleAssignment[],
     exactReqs: ExactCourseRequirement[]
   ): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
@@ -170,12 +219,19 @@ You are an expert university course scheduling AI assistant. Generate an optimal
 - Total Courses: ${courses.length}
 
 **COURSES TO SCHEDULE:**
-${courses.map(c => `
+${courses.map(c => {
+  // For 2-hour courses, schedule as 1 continuous 2-hour lecture
+  const lectureSessions = c.lecture_hours === 2 ? 1 : Math.ceil(c.lecture_hours);
+  const lectureDesc = c.lecture_hours === 2 
+    ? `${c.lecture_hours} hours → 1 continuous 2-hour lecture`
+    : `${c.lecture_hours} hours → ${lectureSessions} session(s)`;
+  return `
 - ${c.course_code} (${c.course_name})
-  * Lectures: ${c.lecture_hours} hours
+  * Lectures: ${lectureDesc}
   * Tutorials: ${c.tutorial_hours} hours  
   * Labs: ${c.lab_hours} hours
-`).join('\n')}
+`;
+}).join('\n')}
 
 **AVAILABLE TIME SLOTS:**
 ${availableSlots.slice(0, 20).map(s => `${s.day} ${s.time} (${s.hours}h)`).join(', ')}... and more
@@ -185,17 +241,25 @@ ${availableSlots.slice(0, 20).map(s => `${s.day} ${s.time} (${s.hours}h)`).join(
 - Labs must start after: ${ruleSettings.labAfterHour}:00
 - Max daily hours per group: ${ruleSettings.maxDailyHours}
 - Blocked days: ${ruleSettings.blockedDays.join(', ') || 'None'}
+- **MIDTERM SLOTS (NO LECTURES):** Monday 12:00-13:50, Wednesday 12:00-13:50 - Lectures cannot be scheduled during these times
 
 **SCHEDULING PRINCIPLES:**
-1. **Lectures**: Spread across multiple days (e.g., Sun/Tue/Thu for 3hr, Mon/Wed for 2hr)
-2. **Tutorials**: Can be 1-hour or 2-hour blocks, preferably mid-week
-3. **Labs**: Prefer 2-hour afternoon blocks (after ${ruleSettings.labAfterHour}:00)
-4. **Balance**: Distribute workload evenly across the week
-5. **Gaps**: Minimize idle time between classes
-6. **Patterns**: Keep consistent timing for same activity type when possible
+1. **PRIORITIZE EARLY SLOTS**: Always prefer morning slots (08:00-11:50) over afternoon slots (13:00-14:50)
+2. **MINIMIZE GAPS**: Schedule classes consecutively when possible - avoid long breaks (2+ hours) between classes on the same day
+3. **Lectures**: 
+   - 2-hour courses: MUST be scheduled as 1 continuous 2-hour lecture (use 2-hour time slots like "08:00-09:50")
+   - 3-hour courses: MUST be scheduled on Sunday, Tuesday, Thursday at the SAME time slot for all three days (e.g., all at "08:00-08:50")
+   - 1-hour courses: Schedule on 1 day
+4. **Tutorials**: 
+   - For 2-hour lecture courses: MUST be scheduled on a DIFFERENT day from the lecture, prefer early morning slots (08:00-11:50), minimize gaps (no breaks)
+   - For other courses: Can be 1-hour or 2-hour blocks, preferably morning
+5. **Labs**: Must be 2-hour afternoon blocks (after ${ruleSettings.labAfterHour}:00) - this is the only exception to early slots
+6. **Balance**: Distribute workload evenly across the week, but prioritize early morning slots
+7. **Gap Avoidance**: When scheduling multiple sessions on the same day, place them back-to-back or with minimal gaps (1 hour max)
+8. **Patterns**: Keep consistent timing for same activity type when possible, and make it early
 
-**OUTPUT FORMAT:**
-Respond ONLY with valid JSON (no markdown, no code blocks). Structure:
+  **OUTPUT FORMAT:**
+Respond ONLY with valid JSON (no markdown, no code blocks, no explanatory text before or after). Start with { and end with }. Structure:
 {
   "schedule": [
     {
@@ -236,11 +300,25 @@ Generate the complete schedule now.`;
     console.log('📥 Gemini response received');
     
     let jsonText = responseText.trim();
-    if (jsonText.startsWith('```json')) {
+    
+    // Remove markdown code blocks if present
+    if (responseText.startsWith('```json')) {
       jsonText = jsonText.replace(/```json\s*/, '').replace(/```\s*$/, '');
     } else if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/```\s*/, '').replace(/```\s*$/, '');
     }
+    
+    // Extract JSON from text that might have explanatory text before/after
+    // Look for the first { and last } to extract JSON object
+    const firstBrace = jsonText.indexOf('{');
+    const lastBrace = jsonText.lastIndexOf('}');
+    
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonText = jsonText.substring(firstBrace, lastBrace + 1);
+    }
+    
+    // Try to clean up any remaining text markers
+    jsonText = jsonText.trim();
     
     const parsed = JSON.parse(jsonText);
     console.log('✅ AI Analysis:', parsed.analysis);
@@ -326,12 +404,19 @@ async function generateMultiGroupScheduleWithAI(
   `).join('')}
   
   **COURSES TO SCHEDULE (SWE courses only):**
-  ${courses.map(c => `
+  ${courses.map(c => {
+    // For 2-hour courses, schedule as 1 continuous 2-hour lecture
+    const lectureSessions = c.lecture_hours === 2 ? 1 : Math.ceil(c.lecture_hours);
+    const lectureDesc = c.lecture_hours === 2 
+      ? `${c.lecture_hours} hours → 1 continuous 2-hour lecture (use 2-hour slots)`
+      : `${c.lecture_hours} hours → ${lectureSessions} session(s)`;
+    return `
   - ${c.course_code} (${c.course_name})
-    * Lectures: ${c.lecture_hours} hours → ${Math.ceil(c.lecture_hours)} sessions
+    * Lectures: ${lectureDesc}
     * Tutorials: ${c.tutorial_hours} hours → ${Math.ceil(c.tutorial_hours)} sessions
-    * Labs: ${c.lab_hours} hours → ${calculateLabSessions(c.lab_hours)} sessions
-  `).join('\n')}
+    * Labs: ${c.lab_hours} hours → ${calculateLabSessions(c.lab_hours, c.course_code)} sessions
+  `;
+  }).join('\n')}
   
   **IMPORTANT CONSTRAINTS:**
   1. DO NOT use time slots that are already occupied by other department courses
@@ -346,8 +431,14 @@ async function generateMultiGroupScheduleWithAI(
   
   **SCHEDULING RULES:**
   - Lunch break: 12:00-12:50 (blocked)
-  - Labs must be after ${ruleSettings.labAfterHour}:00
-  - Lectures: Spread across multiple days
+  -midterm slots in wednesday and monday: 12:00-13:50 (blocked)
+    - Labs must be after ${ruleSettings.labAfterHour}:00 (afternoon only - exception to early slot rule)
+  - **TIME PRIORITY**: Always prefer EARLY MORNING slots (08:00-11:50) over afternoon (13:00-14:50)
+  - **GAP MINIMIZATION**: When multiple classes on same day, schedule them consecutively or with minimal gaps (1 hour max)
+  - **2-HOUR COURSES**: 
+    * Lecture: MUST be scheduled as 1 continuous 2-hour lecture (use 2-hour time slots like "08:00-09:50")
+    * Tutorial: MUST be on a DIFFERENT day from lecture, prefer early slots (08:00-11:50), no breaks
+  - **3-HOUR COURSES**: MUST be scheduled on Sunday, Tuesday, Thursday at the SAME time slot for all three days (e.g., all at "08:00-08:50" or all at "09:00-09:50")
   - Max ${ruleSettings.maxDailyHours} hours per day per group
   
   **STRICT REQUIREMENTS:**
@@ -356,7 +447,8 @@ async function generateMultiGroupScheduleWithAI(
   - Never add extra sessions
   - Never miss required sessions
   
-  **OUTPUT FORMAT (MUST BE VALID JSON):**
+  **OUTPUT FORMAT (MUST BE VALID JSON ONLY - NO TEXT BEFORE OR AFTER):**
+  Start your response directly with the opening brace {. Do not include any explanatory text. Structure:
   {
     "groups": [
       {
@@ -394,11 +486,25 @@ async function generateMultiGroupScheduleWithAI(
       let responseText = result.response.text();
       
       responseText = responseText.trim();
+      
+      // Remove markdown code blocks if present
       if (responseText.startsWith('```json')) {
         responseText = responseText.replace(/```json\s*/, '').replace(/```\s*$/, '');
       } else if (responseText.startsWith('```')) {
         responseText = responseText.replace(/```\s*/, '').replace(/```\s*$/, '');
       }
+      
+      // Extract JSON from text that might have explanatory text before/after
+      // Look for the first { and last } to extract JSON object
+      const firstBrace = responseText.indexOf('{');
+      const lastBrace = responseText.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        responseText = responseText.substring(firstBrace, lastBrace + 1);
+      }
+      
+      // Try to clean up any remaining text markers
+      responseText = responseText.trim();
       
       const parsed = JSON.parse(responseText);
       console.log('✅ AI Multi-Group Verification:', parsed.verification);
@@ -489,36 +595,134 @@ async function completeMissingSessions(
     const labSectionNum = sectionBase + 2;      // Labs get sectionBase + 2
     
     // Complete missing lectures
-    while (current.lectures < req.required_lectures) {
-      const newSession = findAvailableSlot("Lecture", 1, usedSlots, ruleSettings, lectureSectionNum);
-      if (newSession) {
-        completed.push({
-          ...newSession,
-          course_code: req.course_code,
-          course_name: course.course_name,
-          section_num: lectureSectionNum
+    // For 3-hour courses, must schedule all three at the same time slot
+    if (course.lecture_hours === 3 && req.required_lectures === 3) {
+      const pattern = getLecturePattern(3); // Should be ["Sunday", "Tuesday", "Thursday"]
+      const slots = ONE_HOUR_SLOTS.sort((a, b) => {
+        const aHour = parseInt(a.split(":")[0]);
+        const bHour = parseInt(b.split(":")[0]);
+        if (aHour < 12 && bHour >= 12) return -1;
+        if (aHour >= 12 && bHour < 12) return 1;
+        return aHour - bHour;
+      });
+      
+      // Try to find a time slot that works for all three days
+      for (const time of slots) {
+        const canScheduleAll = pattern.every(day => {
+          if (ruleSettings.blockedDays.includes(day)) return false;
+          if (ruleSettings.lunchBreaks.includes(time)) return false;
+          const key = `${day}-${time}`;
+          return !usedSlots.has(key);
         });
-        current.lectures++;
-        console.log(`   ➕ Added missing lecture for ${req.course_code} with section ${lectureSectionNum}`);
-      } else {
-        console.warn(`   ⚠️ Could not find slot for missing lecture in ${req.course_code}`);
-        break;
+        
+        if (canScheduleAll) {
+          // Schedule all three days at the same time
+          for (const day of pattern) {
+            const key = `${day}-${time}`;
+            completed.push({
+              course_code: req.course_code,
+              course_name: course.course_name,
+              activity_type: "Lecture",
+              section_num: lectureSectionNum,
+              day,
+              time_slot: time,
+              hours: 1
+            });
+            usedSlots.add(key);
+            current.lectures++;
+          }
+          console.log(`   ➕ Added missing 3L lectures for ${req.course_code} at ${time} on ${pattern.join(', ')}`);
+          break; // Done - scheduled all three
+        }
+      }
+      
+      if (current.lectures < req.required_lectures) {
+        console.warn(`   ⚠️ Could not find same time slot for 3L course ${req.course_code} on ${pattern.join(', ')}`);
+      }
+    } else {
+      // For 2-hour and other courses, use normal completion
+      while (current.lectures < req.required_lectures) {
+        const lectureHours = course.lecture_hours === 2 ? 2 : 1;
+        const newSession = findAvailableSlot("Lecture", lectureHours, usedSlots, ruleSettings, lectureSectionNum);
+        if (newSession) {
+          completed.push({
+            ...newSession,
+            course_code: req.course_code,
+            course_name: course.course_name,
+            section_num: lectureSectionNum
+          });
+          current.lectures++;
+          console.log(`   ➕ Added missing ${lectureHours}h lecture for ${req.course_code} with section ${lectureSectionNum}`);
+        } else {
+          console.warn(`   ⚠️ Could not find slot for missing lecture in ${req.course_code}`);
+          break;
+        }
       }
     }
     
     // Complete missing tutorials
+    // For 2L courses, avoid scheduling tutorial on same day as lecture
+    const lectureDays = new Set(generated.filter(a => a.course_code === req.course_code && a.activity_type === "Lecture").map(a => a.day));
+    const is2LCourse = course.lecture_hours === 2;
+    
     while (current.tutorials < req.required_tutorials) {
       const hoursNeeded = course.tutorial_hours === 2 ? 2 : 1;
-      const newSession = findAvailableSlot("Tutorial", hoursNeeded, usedSlots, ruleSettings, tutorialSectionNum);
+      
+      // Try to find slot on different day from lecture (for 2L), prioritize early slots
+      let newSession = null;
+      const sortedDays = [...DAYS].sort((a, b) => {
+        // For 2L, prioritize days that are NOT lecture days
+        if (is2LCourse) {
+          if (lectureDays.has(a) && !lectureDays.has(b)) return 1;
+          if (!lectureDays.has(a) && lectureDays.has(b)) return -1;
+        }
+        return 0;
+      });
+      
+      for (const day of sortedDays) {
+        if (is2LCourse && lectureDays.has(day)) continue; // Skip lecture day for 2L
+        if (ruleSettings.blockedDays.includes(day)) continue;
+        
+        const slots = hoursNeeded === 2 ? TWO_HOUR_SLOTS : ONE_HOUR_SLOTS;
+        const sortedSlots = [...slots].sort((a, b) => {
+          const aHour = parseInt(a.split(":")[0]);
+          const bHour = parseInt(b.split(":")[0]);
+          if (aHour < 12 && bHour >= 12) return -1; // Early slots first
+          if (aHour >= 12 && bHour < 12) return 1;
+          return aHour - bHour;
+        });
+        
+        for (const time of sortedSlots) {
+          if (ruleSettings.lunchBreaks.includes(time)) continue;
+          const key = `${day}-${time}`;
+          if (!usedSlots.has(key)) {
+            const hours = time.includes("09:50") || time.includes("10:50") || time.includes("14:50") ? 2 : 1;
+            if (hours === hoursNeeded && isSlotValid(day, time, hours, usedSlots, ruleSettings, "Tutorial")) {
+              newSession = {
+                activity_type: "Tutorial",
+                section_num: tutorialSectionNum,
+                day,
+                time_slot: time,
+                hours
+              };
+              usedSlots.add(key);
+              break;
+            }
+          }
+        }
+        if (newSession) break;
+      }
+      
       if (newSession) {
         completed.push({
           ...newSession,
           course_code: req.course_code,
           course_name: course.course_name,
-          section_num: tutorialSectionNum
+          section_num: tutorialSectionNum,
+          activity_type: "Tutorial" as const
         });
         current.tutorials++;
-        console.log(`   ➕ Added missing tutorial for ${req.course_code} with section ${tutorialSectionNum}`);
+        console.log(`   ➕ Added missing tutorial for ${req.course_code} on ${newSession.day} with section ${tutorialSectionNum}`);
       } else {
         console.warn(`   ⚠️ Could not find slot for missing tutorial in ${req.course_code}`);
         break;
@@ -526,18 +730,65 @@ async function completeMissingSessions(
     }
     
     // Complete missing labs
+    // For courses with multiple lab sessions (like SWE444), schedule on different days
+    const requiredLabSessions = calculateLabSessions(course.lab_hours, course.course_code);
+    const scheduledLabDays = new Set(generated.filter(a => a.course_code === req.course_code && a.activity_type === "Lab").map(a => a.day));
+    
     while (current.labs < req.required_labs) {
       const hoursNeeded = course.lab_hours >= 2 ? 2 : 1;
-      const newSession = findAvailableSlot("Lab", hoursNeeded, usedSlots, ruleSettings, labSectionNum);
+      let newSession = null;
+      
+      // Try to find slot on different day from existing lab sessions (if multiple sessions required)
+      for (const day of DAYS) {
+        if (ruleSettings.blockedDays.includes(day)) continue;
+        // Skip days where we already scheduled a lab for this course (if multiple sessions needed)
+        if (requiredLabSessions > 1 && scheduledLabDays.has(day)) continue;
+        
+        const slots = TWO_HOUR_SLOTS.filter(time => {
+          const startHour = parseInt(time.split(":")[0]);
+          return startHour >= ruleSettings.labAfterHour;
+        });
+        
+        const sortedSlots = [...slots].sort((a, b) => {
+          const aHour = parseInt(a.split(":")[0]);
+          const bHour = parseInt(b.split(":")[0]);
+          if (aHour < 12 && bHour >= 12) return -1;
+          if (aHour >= 12 && bHour < 12) return 1;
+          return aHour - bHour;
+        });
+        
+        for (const time of sortedSlots) {
+          if (ruleSettings.lunchBreaks.includes(time)) continue;
+          const key = `${day}-${time}`;
+          if (!usedSlots.has(key)) {
+            const hours = time.includes("09:50") || time.includes("10:50") || time.includes("14:50") ? 2 : 1;
+            if (hours === hoursNeeded && isSlotValid(day, time, hours, usedSlots, ruleSettings, "Lab")) {
+              newSession = {
+                activity_type: "Lab",
+                section_num: labSectionNum,
+                day,
+                time_slot: time,
+                hours
+              };
+              usedSlots.add(key);
+              scheduledLabDays.add(day);
+              break;
+            }
+          }
+        }
+        if (newSession) break;
+      }
+      
       if (newSession) {
         completed.push({
           ...newSession,
           course_code: req.course_code,
           course_name: course.course_name,
-          section_num: labSectionNum
+          section_num: labSectionNum,
+          activity_type: "Lab" as const
         });
         current.labs++;
-        console.log(`   ➕ Added missing lab for ${req.course_code} with section ${labSectionNum}`);
+        console.log(`   ➕ Added missing lab for ${req.course_code} on ${newSession.day} with section ${labSectionNum}`);
       } else {
         console.warn(`   ⚠️ Could not find slot for missing lab in ${req.course_code}`);
         break;
@@ -598,7 +849,14 @@ function parseRules(rules: SchedulingRule[]) {
     labAfterHour: 12,
     maxDailyHours: 8,
     blockedDays: [] as string[],
+    midtermSlots: [] as Array<{ day: string; startTime: string; endTime: string }>, // Midterm time slots
   };
+  
+  // Block midterm slots: 12:00-14:00 on Monday and Wednesday (for lectures)
+  settings.midtermSlots.push(
+    { day: "Monday", startTime: "12:00", endTime: "14:00" },
+    { day: "Wednesday", startTime: "12:00", endTime: "14:00" }
+  );
 
   for (const r of rules) {
     const desc = r.rule_description.toLowerCase();
@@ -813,8 +1071,11 @@ if (isMultiGroup) {
   );
 
 // ✅ ADD VALIDATION AND COMPLETION
-console.log(`🔍 Validating AI-generated session counts for Group ${groupNum}...`);
-const validation = validateGeneratedSessions(generated, exactReqs);
+    console.log(`🔍 Validating and enforcing exact session counts for Group ${groupNum}...`);
+    // First, remove any extra sessions beyond required counts
+    generated = enforceExactSessionCounts(generated, exactReqs);
+    // Then validate
+    const validation = validateGeneratedSessions(generated, exactReqs);
 if (!validation.isValid) {
   console.warn(`⚠️ Group ${groupNum} session count mismatch: ${validation.errors.join(', ')}`);
   console.log('🛠️ Attempting to complete missing sessions...');
@@ -972,7 +1233,10 @@ else {
   
     // ✅ ADD: Validation for single group too
     const exactReqs = validateExactRequirements(courses);
-    console.log(`🔍 Validating AI-generated session counts for Group ${group}...`);
+    console.log(`🔍 Validating and enforcing exact session counts for Group ${group}...`);
+    // First, remove any extra sessions beyond required counts
+    generated = enforceExactSessionCounts(generated, exactReqs);
+    // Then validate
     const validation = validateGeneratedSessions(generated, exactReqs);
     if (!validation.isValid) {
       console.warn(`⚠️ Group ${group} session count mismatch: ${validation.errors.join(', ')}`);
@@ -1082,9 +1346,126 @@ function convertAISuggestionsToAssignments(
     const course = courses.find(c => c.course_code === courseCode);
     if (!course) continue;
 
+    // Track assignments by day for gap minimization across all activity types for this course
+    const dayAssignments = new Map<string, ScheduleAssignment[]>();
+    
+    // For 3L courses, collect all lecture sessions first to validate same time slot
+    const is3LCourse = course.lecture_hours === 3;
+    const lectureSessions: any[] = [];
+    const otherSuggestions: GeminiScheduleSuggestion[] = [];
+
     // Process each activity type for this course
     for (const suggestion of courseSuggestionsList) {
-      const sortedSessions = suggestion.sessions.sort((a: any, b: any) => b.priority - a.priority);
+      if (is3LCourse && suggestion.activity_type === "Lecture") {
+        // Collect lecture sessions for 3L courses to validate
+        lectureSessions.push(...suggestion.sessions);
+      } else {
+        otherSuggestions.push(suggestion);
+      }
+    }
+    
+    // Process lecture sessions for 3L courses separately
+    if (is3LCourse && lectureSessions.length > 0) {
+      // Find all unique time slots used for lectures
+      const timeSlotsUsed = new Set<string>();
+      const lectureAssignments: ScheduleAssignment[] = [];
+      const pattern = getLecturePattern(3); // ["Sunday", "Tuesday", "Thursday"]
+      
+      // Group sessions by time slot
+      const sessionsByTime = new Map<string, any[]>();
+      for (const session of lectureSessions) {
+        if (!sessionsByTime.has(session.time_slot)) {
+          sessionsByTime.set(session.time_slot, []);
+        }
+        sessionsByTime.get(session.time_slot)!.push(session);
+      }
+      
+      // Find a time slot that has sessions for all three days (Sunday, Tuesday, Thursday)
+      let selectedTime: string | null = null;
+      for (const [time, sessions] of Array.from(sessionsByTime.entries())) {
+        const days = new Set(sessions.map((s: any) => s.day));
+        if (pattern.every(day => days.has(day))) {
+          selectedTime = time;
+          break;
+        }
+      }
+      
+      // If no time slot has all three days, use the most common time slot
+      if (!selectedTime && sessionsByTime.size > 0) {
+        let maxCount = 0;
+        for (const [time, sessions] of Array.from(sessionsByTime.entries())) {
+          if (sessions.length > maxCount) {
+            maxCount = sessions.length;
+            selectedTime = time;
+          }
+        }
+      }
+      
+      // Process sessions for 3L course - only accept sessions at the selected time slot
+      const currentSectionNum = sectionBase; // Lecture section
+      for (const session of lectureSessions) {
+        // Only accept sessions at the selected time slot and on correct days
+        if (selectedTime && session.time_slot === selectedTime && pattern.includes(session.day)) {
+          const key = `${session.day}-${session.time_slot}`;
+          
+          if (used.has(key)) {
+            console.log(`⏭️ Skipping occupied slot: ${key}`);
+            continue;
+          }
+          
+          if (!isSlotValid(session.day, session.time_slot, 1, used, ruleSettings, "Lecture")) {
+            continue;
+          }
+          
+          const assignment: ScheduleAssignment = {
+            course_code: courseCode,
+            course_name: course.course_name,
+            activity_type: "Lecture",
+            section_num: currentSectionNum,
+            day: session.day,
+            time_slot: session.time_slot,
+            hours: 1,
+          };
+          
+          lectureAssignments.push(assignment);
+          
+          if (!dayAssignments.has(session.day)) {
+            dayAssignments.set(session.day, []);
+          }
+          dayAssignments.get(session.day)!.push(assignment);
+          
+          used.add(key);
+          timeSlotsUsed.add(session.time_slot);
+        } else {
+          console.log(`⚠️ Skipping 3L lecture session for ${courseCode} on ${session.day} at ${session.time_slot} (must be at same time slot for all days)`);
+        }
+      }
+      
+      // Validate that all three days are scheduled
+      const scheduledDays = new Set(lectureAssignments.map(a => a.day));
+      if (scheduledDays.size !== 3 || !pattern.every(day => scheduledDays.has(day))) {
+        console.warn(`⚠️ 3L course ${courseCode} is missing sessions on some days. Scheduled: ${Array.from(scheduledDays).join(', ')}, Required: ${pattern.join(', ')}`);
+      }
+      
+      assignments.push(...lectureAssignments);
+    }
+
+    // Process other activity types (Tutorial, Lab) and non-3L lectures
+    const suggestionsToProcess = is3LCourse ? otherSuggestions : courseSuggestionsList;
+    for (const suggestion of suggestionsToProcess) {
+      // Sort sessions by priority first, then by time (early morning first)
+      const sortedSessions = suggestion.sessions.sort((a: any, b: any) => {
+        // First sort by priority (higher priority first)
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority;
+        }
+        // Then sort by time (early morning first)
+        const aHour = parseInt(a.time_slot.split(":")[0]);
+        const bHour = parseInt(b.time_slot.split(":")[0]);
+        if (aHour < 12 && bHour >= 12) return -1; // Morning before afternoon
+        if (aHour >= 12 && bHour < 12) return 1;
+        return aHour - bHour;
+      });
 
       // Calculate section number based on activity type (same for all sessions of this activity type)
       let currentSectionNum = sectionBase; // Lecture
@@ -1106,12 +1487,53 @@ function convertAISuggestionsToAssignments(
         const hours = session.time_slot.includes("09:50") || 
                       session.time_slot.includes("10:50") || 
                       session.time_slot.includes("14:50") ? 2 : 1;
+        
+        // For 2-hour courses, enforce that lectures must be 2-hour blocks
+        if (suggestion.activity_type === "Lecture" && course.lecture_hours === 2 && hours !== 2) {
+          console.log(`⚠️ Skipping ${suggestion.activity_type} session for ${courseCode} - must be 2-hour block (got ${hours}h)`);
+          continue;
+        }
+        
+        // For labs, enforce exact session count - 2 lab hours = 1 session only
+        if (suggestion.activity_type === "Lab") {
+          const requiredLabSessions = calculateLabSessions(course.lab_hours, course.course_code);
+          const currentLabCount = assignments.filter(a => a.course_code === courseCode && a.activity_type === "Lab").length;
+          
+          // If we already have the required number of lab sessions, skip additional ones
+          if (currentLabCount >= requiredLabSessions) {
+            console.log(`⚠️ Skipping extra lab session for ${courseCode} - already have ${currentLabCount}/${requiredLabSessions} required`);
+            continue;
+          }
+          
+          // For 2-hour labs, must be 2-hour block
+          if (course.lab_hours === 2 && hours !== 2) {
+            console.log(`⚠️ Skipping lab session for ${courseCode} - must be 2-hour block (got ${hours}h)`);
+            continue;
+          }
+        }
 
-        if (!isSlotValid(session.day, session.time_slot, hours, used, ruleSettings)) {
+        // Check gap minimization: if we have existing assignments on this day, prefer consecutive slots
+        const existingOnDay = dayAssignments.get(session.day) || [];
+        if (existingOnDay.length > 0 && suggestion.activity_type !== "Lab") {
+          // For non-labs, check if this slot is consecutive (gap <= 1 hour)
+          const latestEnd = Math.max(...existingOnDay.map(a => {
+            const start = parseInt(a.time_slot.split(":")[0]);
+            return start + (a.hours === 2 ? 2 : 1);
+          }));
+          const timeStart = parseInt(session.time_slot.split(":")[0]);
+          const gap = timeStart - latestEnd;
+          
+          // If gap is more than 1 hour, skip and try other slots first (they're already sorted by priority and time)
+          if (gap > 1) {
+            continue; // Will try other slots that might fit better
+          }
+        }
+
+        if (!isSlotValid(session.day, session.time_slot, hours, used, ruleSettings, suggestion.activity_type as any)) {
           continue;
         }
 
-        assignments.push({
+        const assignment: ScheduleAssignment = {
           course_code: suggestion.course_code,
           course_name: course.course_name,
           activity_type: suggestion.activity_type as any,
@@ -1119,7 +1541,15 @@ function convertAISuggestionsToAssignments(
           day: session.day,
           time_slot: session.time_slot,
           hours,
-        });
+        };
+
+        assignments.push(assignment);
+        
+        // Track assignments by day for gap minimization
+        if (!dayAssignments.has(session.day)) {
+          dayAssignments.set(session.day, []);
+        }
+        dayAssignments.get(session.day)!.push(assignment);
 
         used.add(key);
       }
@@ -1136,12 +1566,36 @@ function isSlotValid(
   time: string,
   hours: number,
   used: Set<string>,
-  ruleSettings: ReturnType<typeof parseRules>
+  ruleSettings: ReturnType<typeof parseRules>,
+  activityType?: "Lecture" | "Tutorial" | "Lab" // Add activity type to check midterm slots for lectures only
 ): boolean {
   const key = `${day}-${time}`;
   if (used.has(key)) return false;
   if (ruleSettings.lunchBreaks.includes(time)) return false;
   if (ruleSettings.blockedDays.includes(day)) return false;
+  
+  // Block midterm slots (12:00-14:00) on Monday and Wednesday for lectures only
+  if (activityType === "Lecture") {
+    const startHour = parseInt(time.split(":")[0]);
+    const timeStart = parseInt(time.split(":")[0]);
+    const timeEnd = time.includes("09:50") || time.includes("10:50") || time.includes("14:50") 
+      ? timeStart + 2 
+      : timeStart + 1;
+    
+    for (const midtermSlot of ruleSettings.midtermSlots || []) {
+      if (midtermSlot.day === day) {
+        const midtermStart = parseInt(midtermSlot.startTime.split(":")[0]);
+        const midtermEnd = parseInt(midtermSlot.endTime.split(":")[0]);
+        // Check if the slot overlaps with midterm time (12:00-14:00)
+        if ((timeStart >= midtermStart && timeStart < midtermEnd) || 
+            (timeEnd > midtermStart && timeEnd <= midtermEnd) ||
+            (timeStart < midtermStart && timeEnd > midtermEnd)) {
+          return false; // Block lectures during midterm time
+        }
+      }
+    }
+  }
+  
   const startHour = parseInt(time.split(":")[0]);
   if (startHour < 8 || startHour > 14) return false;
   return true;
@@ -1175,7 +1629,9 @@ function generateScheduleFallback(
       result.push(...lectures);
     }
     if (course.tutorial_hours > 0) {
-      const tutorials = scheduleTutorials(course, used, dailyHours, ruleSettings, sectionBase + 1);
+      // For 2L courses, pass existing lectures to avoid same day
+      const existingLectures = result.filter(a => a.course_code === course.course_code && a.activity_type === "Lecture");
+      const tutorials = scheduleTutorials(course, used, dailyHours, ruleSettings, sectionBase + 1, existingLectures);
       result.push(...tutorials);
     }
     if (course.lab_hours > 0) {
@@ -1190,9 +1646,86 @@ function generateScheduleFallback(
 
 function scheduleLectures(course: Course, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>, sectionNum: number): ScheduleAssignment[] {
   const assignments: ScheduleAssignment[] = [];
+  
+  // For 2-hour courses, schedule as 1 continuous 2-hour lecture
+  if (course.lecture_hours === 2) {
+    // Sort 2-hour slots to prioritize early morning (08:00-11:50) over afternoon (13:00-14:50)
+    const sortedTwoHourSlots = [...TWO_HOUR_SLOTS].sort((a, b) => {
+      const aHour = parseInt(a.split(":")[0]);
+      const bHour = parseInt(b.split(":")[0]);
+      if (aHour < 12 && bHour >= 12) return -1; // Morning before afternoon
+      if (aHour >= 12 && bHour < 12) return 1;
+      return aHour - bHour;
+    });
+    
+    // Try to find an available 2-hour slot (prefer early morning)
+    for (const day of DAYS) {
+      if (ruleSettings.blockedDays.includes(day)) continue;
+      
+      for (const time of sortedTwoHourSlots) {
+        if (isSlotAvailable(day, time, 2, used, dailyHours, ruleSettings, "Lecture")) {
+          const key = `${day}-${time}`;
+          assignments.push({
+            course_code: course.course_code,
+            course_name: course.course_name,
+            activity_type: "Lecture",
+            section_num: sectionNum,
+            day,
+            time_slot: time,
+            hours: 2,
+          });
+          used.add(key);
+          dailyHours[day] = (dailyHours[day] || 0) + 2;
+          return assignments;
+        }
+      }
+    }
+    return assignments; // Return empty if no slot found
+  }
+  
+  // For other courses, use the pattern-based scheduling
   const pattern = getLecturePattern(course.lecture_hours);
   
-  for (const time of ONE_HOUR_SLOTS) {
+  // Sort time slots to prioritize early morning (08:00-11:50) over afternoon (13:00-14:50)
+  const sortedOneHourSlots = [...ONE_HOUR_SLOTS].sort((a, b) => {
+    const aHour = parseInt(a.split(":")[0]);
+    const bHour = parseInt(b.split(":")[0]);
+    if (aHour < 12 && bHour >= 12) return -1; // Morning before afternoon
+    if (aHour >= 12 && bHour < 12) return 1;
+    return aHour - bHour;
+  });
+  
+  // For 3-hour courses (Sunday/Tuesday/Thursday), MUST schedule at the same time slot
+  if (course.lecture_hours === 3 && pattern.length === 3) {
+    // Try to schedule all three lectures at the same time slot
+    for (const time of sortedOneHourSlots) {
+      const canScheduleAll = pattern.every(day => isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings, "Lecture"));
+      if (canScheduleAll) {
+        // Schedule all three days at the same time
+        for (const day of pattern) {
+          const key = `${day}-${time}`;
+          assignments.push({
+            course_code: course.course_code,
+            course_name: course.course_name,
+            activity_type: "Lecture",
+            section_num: sectionNum,
+            day,
+            time_slot: time,
+            hours: 1,
+          });
+          used.add(key);
+          dailyHours[day] = (dailyHours[day] || 0) + 1;
+        }
+        return assignments; // Success - all three days scheduled at same time
+      }
+    }
+    // If no slot available for all three days, return empty (can't schedule)
+    console.warn(`⚠️ Could not find same time slot for ${course.course_code} on ${pattern.join(', ')}`);
+    return assignments; // Return empty if can't schedule all at same time
+  }
+  
+  // For other courses, try to schedule at same time first
+  for (const time of sortedOneHourSlots) {
     const canScheduleAll = pattern.every(day => isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings));
     if (canScheduleAll) {
       for (const day of pattern) {
@@ -1213,11 +1746,30 @@ function scheduleLectures(course: Course, used: Set<string>, dailyHours: Record<
     }
   }
 
+  // Fallback for non-3L courses: Schedule individually, prioritizing early slots and minimizing gaps
   let hoursScheduled = 0;
   for (const day of pattern) {
     if (hoursScheduled >= course.lecture_hours) break;
-    for (const time of ONE_HOUR_SLOTS) {
-      if (isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings)) {
+    
+    // Find existing sessions on this day to minimize gaps
+    const existingOnDay = assignments.filter(a => a.day === day);
+    const latestHour = existingOnDay.length > 0 
+      ? Math.max(...existingOnDay.map(a => {
+          const start = parseInt(a.time_slot.split(":")[0]);
+          return start + (a.hours === 2 ? 2 : 1);
+        }))
+      : -1;
+    
+    for (const time of sortedOneHourSlots) {
+      if (isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings, "Lecture")) {
+        const timeStart = parseInt(time.split(":")[0]);
+        
+        // If we have existing sessions, prefer consecutive slots (gap <= 1 hour)
+        if (latestHour >= 0) {
+          const gap = timeStart - latestHour;
+          if (gap > 1) continue; // Skip if gap is more than 1 hour
+        }
+        
         const key = `${day}-${time}`;
         assignments.push({
           course_code: course.course_code,
@@ -1238,14 +1790,39 @@ function scheduleLectures(course: Course, used: Set<string>, dailyHours: Record<
   return assignments;
 }
 
-function scheduleTutorials(course: Course, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>, sectionNum: number): ScheduleAssignment[] {
+function scheduleTutorials(course: Course, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>, sectionNum: number, existingLectures: ScheduleAssignment[] = []): ScheduleAssignment[] {
   const assignments: ScheduleAssignment[] = [];
   let hoursScheduled = 0;
 
+  // For 2L courses, get the lecture day to avoid scheduling tutorial on same day
+  const is2LCourse = course.lecture_hours === 2;
+  const lectureDays = new Set(existingLectures.filter(l => l.course_code === course.course_code).map(l => l.day));
+  
+  // Sort slots to prioritize early morning (08:00-11:50) over afternoon (13:00-14:50)
+  const sortedTwoHourSlots = [...TWO_HOUR_SLOTS].sort((a, b) => {
+    const aHour = parseInt(a.split(":")[0]);
+    const bHour = parseInt(b.split(":")[0]);
+    if (aHour < 12 && bHour >= 12) return -1;
+    if (aHour >= 12 && bHour < 12) return 1;
+    return aHour - bHour;
+  });
+  
+  const sortedOneHourSlots = [...ONE_HOUR_SLOTS].sort((a, b) => {
+    const aHour = parseInt(a.split(":")[0]);
+    const bHour = parseInt(b.split(":")[0]);
+    if (aHour < 12 && bHour >= 12) return -1;
+    if (aHour >= 12 && bHour < 12) return 1;
+    return aHour - bHour;
+  });
+
   if (course.tutorial_hours === 2) {
+    // Prefer early morning 2-hour slots, avoid lecture day for 2L courses
     for (const day of DAYS) {
-      for (const time of TWO_HOUR_SLOTS) {
-        if (isSlotAvailable(day, time, 2, used, dailyHours, ruleSettings)) {
+      if (is2LCourse && lectureDays.has(day)) continue; // Skip lecture day for 2L courses
+      if (ruleSettings.blockedDays.includes(day)) continue;
+      
+      for (const time of sortedTwoHourSlots) {
+        if (isSlotAvailable(day, time, 2, used, dailyHours, ruleSettings, "Tutorial")) {
           const key = `${day}-${time}`;
           assignments.push({
             course_code: course.course_code,
@@ -1264,11 +1841,30 @@ function scheduleTutorials(course: Course, used: Set<string>, dailyHours: Record
     }
   }
 
+  // For 1-hour tutorials, schedule on different day from lecture (for 2L) and minimize gaps
   for (const day of DAYS) {
     if (hoursScheduled >= course.tutorial_hours) break;
-    for (const time of ONE_HOUR_SLOTS) {
+    if (is2LCourse && lectureDays.has(day)) continue; // Skip lecture day for 2L courses
+    if (ruleSettings.blockedDays.includes(day)) continue;
+    
+    // Check existing sessions on this day to minimize gaps
+    const existingOnDay = assignments.filter(a => a.day === day);
+    const latestHour = existingOnDay.length > 0 
+      ? Math.max(...existingOnDay.map(a => {
+          const start = parseInt(a.time_slot.split(":")[0]);
+          return start + (a.hours === 2 ? 2 : 1);
+        }))
+      : -1;
+    
+    for (const time of sortedOneHourSlots) {
       if (hoursScheduled >= course.tutorial_hours) break;
-      if (isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings)) {
+      
+      const timeStart = parseInt(time.split(":")[0]);
+      
+      // Prefer consecutive slots (no break) - gap should be 0 or 1 hour max
+      if (latestHour >= 0 && timeStart - latestHour > 1) continue;
+      
+      if (isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings, "Lecture")) {
         const key = `${day}-${time}`;
         assignments.push({
           course_code: course.course_code,
@@ -1290,41 +1886,30 @@ function scheduleTutorials(course: Course, used: Set<string>, dailyHours: Record
 
 function scheduleLabs(course: Course, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>, sectionNum: number): ScheduleAssignment[] {
   const assignments: ScheduleAssignment[] = [];
-  let hoursScheduled = 0;
-
-  for (const day of DAYS) {
-    if (hoursScheduled >= course.lab_hours) break;
-    for (const time of TWO_HOUR_SLOTS) {
-      if (hoursScheduled >= course.lab_hours) break;
-      const startHour = parseInt(time.split(":")[0]);
-      if (startHour < ruleSettings.labAfterHour) continue;
-      if (isSlotAvailable(day, time, 2, used, dailyHours, ruleSettings)) {
-        const key = `${day}-${time}`;
-        assignments.push({
-          course_code: course.course_code,
-          course_name: course.course_name,
-          activity_type: "Lab",
-          section_num: sectionNum,
-          day,
-          time_slot: time,
-          hours: 2,
-        });
-        used.add(key);
-        dailyHours[day] = (dailyHours[day] || 0) + 2;
-        hoursScheduled += 2;
-        break;
-      }
-    }
-  }
-
-  if (hoursScheduled < course.lab_hours) {
+  
+  // Calculate how many 2-hour sessions needed
+  const requiredLabSessions = calculateLabSessions(course.lab_hours, course.course_code);
+  
+  // Track which days we've already scheduled labs for this course (to avoid same day for multiple sessions)
+  const scheduledDays = new Set<string>();
+  
+  // Labs are always 2-hour blocks, so we schedule requiredLabSessions number of 2-hour sessions
+  // For courses like SWE444 (2 sessions), schedule on DIFFERENT days
+  for (let i = 0; i < requiredLabSessions; i++) {
+    let sessionScheduled = false;
+    
+    // Try each day, but skip days where we already scheduled a lab for this course
     for (const day of DAYS) {
-      if (hoursScheduled >= course.lab_hours) break;
-      for (const time of ONE_HOUR_SLOTS) {
-        if (hoursScheduled >= course.lab_hours) break;
+      if (ruleSettings.blockedDays.includes(day)) continue;
+      
+      // Skip days where we already scheduled a lab session for this course
+      if (requiredLabSessions > 1 && scheduledDays.has(day)) continue;
+      
+      for (const time of TWO_HOUR_SLOTS) {
         const startHour = parseInt(time.split(":")[0]);
         if (startHour < ruleSettings.labAfterHour) continue;
-        if (isSlotAvailable(day, time, 1, used, dailyHours, ruleSettings)) {
+        
+        if (isSlotAvailable(day, time, 2, used, dailyHours, ruleSettings, "Lab")) {
           const key = `${day}-${time}`;
           assignments.push({
             course_code: course.course_code,
@@ -1333,15 +1918,19 @@ function scheduleLabs(course: Course, used: Set<string>, dailyHours: Record<stri
             section_num: sectionNum,
             day,
             time_slot: time,
-            hours: 1,
+            hours: 2,
           });
           used.add(key);
-          dailyHours[day] = (dailyHours[day] || 0) + 1;
-          hoursScheduled++;
+          dailyHours[day] = (dailyHours[day] || 0) + 2;
+          scheduledDays.add(day); // Mark this day as used for this course
+          sessionScheduled = true;
+          break; // Found a slot for this session, move to next
         }
       }
+      if (sessionScheduled) break; // Found a slot for this session, move to next session
     }
   }
+  
   return assignments;
 }
 
@@ -1351,12 +1940,34 @@ function getLecturePattern(hours: number): string[] {
   return ["Sunday"];
 }
 
-function isSlotAvailable(day: string, time: string, hours: number, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>): boolean {
+function isSlotAvailable(day: string, time: string, hours: number, used: Set<string>, dailyHours: Record<string, number>, ruleSettings: ReturnType<typeof parseRules>, activityType?: "Lecture" | "Tutorial" | "Lab"): boolean {
   const key = `${day}-${time}`;
   const startHour = parseInt(time.split(":")[0]);
   if (used.has(key)) return false;
   if (ruleSettings.lunchBreaks.includes(time)) return false;
   if (ruleSettings.blockedDays.includes(day)) return false;
+  
+  // Block midterm slots (12:00-14:00) on Monday and Wednesday for lectures only
+  if (activityType === "Lecture") {
+    const timeStart = parseInt(time.split(":")[0]);
+    const timeEnd = time.includes("09:50") || time.includes("10:50") || time.includes("14:50") 
+      ? timeStart + 2 
+      : timeStart + 1;
+    
+    for (const midtermSlot of ruleSettings.midtermSlots || []) {
+      if (midtermSlot.day === day) {
+        const midtermStart = parseInt(midtermSlot.startTime.split(":")[0]);
+        const midtermEnd = parseInt(midtermSlot.endTime.split(":")[0]);
+        // Check if the slot overlaps with midterm time (12:00-14:00)
+        if ((timeStart >= midtermStart && timeStart < midtermEnd) || 
+            (timeEnd > midtermStart && timeEnd <= midtermEnd) ||
+            (timeStart < midtermStart && timeEnd > midtermEnd)) {
+          return false; // Block lectures during midterm time
+        }
+      }
+    }
+  }
+  
   if ((dailyHours[day] || 0) + hours > ruleSettings.maxDailyHours) return false;
   if (startHour < 8 || startHour > 14) return false;
   return true;
