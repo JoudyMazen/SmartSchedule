@@ -56,3 +56,13 @@ export interface ScheduleResponse {
   message?: string;
   error?: string;
 }
+
+export interface Comment {
+  id: string;
+  level: number;
+  group: number;
+  message: string;
+  authorName: string;
+  authorRole: string;
+  createdAt: number;
+}

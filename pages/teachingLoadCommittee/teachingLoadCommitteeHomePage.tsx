@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Form, Table, Alert, Spinner, Modal, Badge, InputGroup } from 'react-bootstrap';
 import Layout from '../../components/Layout';
+import { useSharedSchedule } from '../../lib/hooks';
+import CommentsModal from '../../components/CommentsModal';
 
 interface ScheduleEntry {
   schedule_id: number;
@@ -44,6 +46,60 @@ interface Day {
   day: string;
 }
 
+// Helper component for comments button per group
+const CommentsButtonForGroup: React.FC<{
+  level: number;
+  group: number;
+  onShowModal: (group: number) => void;
+}> = ({ level, group, onShowModal }) => {
+  const { comments } = useSharedSchedule(level, group);
+
+  return (
+    <Button
+      variant="light"
+      size="sm"
+      onClick={() => onShowModal(group)}
+      style={{
+        background: 'rgba(255, 255, 255, 0.2)',
+        border: '1px solid rgba(255, 255, 255, 0.3)',
+        color: 'white',
+      }}
+      className="d-flex align-items-center"
+    >
+      <i className="bi bi-chat-dots me-2"></i>
+      Comments
+      {comments.length > 0 && (
+        <Badge bg="light" text="dark" className="ms-2">
+          {comments.length}
+        </Badge>
+      )}
+    </Button>
+  );
+};
+
+// Helper component for comments modal per group
+const CommentsModalForGroup: React.FC<{
+  show: boolean;
+  onHide: () => void;
+  level: number;
+  group: number;
+  isLoading: boolean;
+}> = ({ show, onHide, level, group, isLoading }) => {
+  const { comments, addComment } = useSharedSchedule(level, group);
+
+  return (
+    <CommentsModal
+      show={show}
+      onHide={onHide}
+      comments={comments}
+      onAddComment={addComment}
+      level={level}
+      group={group}
+      isLoading={isLoading}
+    />
+  );
+};
+
 const TeachingLoadCommitteeHomePage: React.FC = () => {
   const [selectedLevel, setSelectedLevel] = useState(3);
   const [selectedVersion, setSelectedVersion] = useState<string>('latest');
@@ -73,6 +129,10 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<number>(1);
   const [availableGroups, setAvailableGroups] = useState<number[]>([]); // ✅ Start empty, will be populated
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [commentsGroup, setCommentsGroup] = useState<number | null>(null);
+
+  // Note: Comments are managed per group via separate useSharedSchedule calls in render
 
   const levels = [3, 4, 5, 6, 7, 8];
 
@@ -439,10 +499,20 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
                 border: 'none'
               }}
             >
-              <h5 className="mb-0 fw-semibold">
-                <i className="bi bi-calendar-week me-2"></i>
-                Level {selectedLevel} - Group {groupNum}
-              </h5>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0 fw-semibold">
+                  <i className="bi bi-calendar-week me-2"></i>
+                  Level {selectedLevel} - Group {groupNum}
+                </h5>
+                <CommentsButtonForGroup
+                  level={selectedLevel}
+                  group={groupNum}
+                  onShowModal={(group) => {
+                    setCommentsGroup(group);
+                    setShowCommentsModal(true);
+                  }}
+                />
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
               <div style={{ overflowX: 'auto' }}>
@@ -1029,6 +1099,20 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
           )}
         </Modal.Footer>
       </Modal>
+
+      {/* Comments Modal */}
+      {commentsGroup !== null && (
+        <CommentsModalForGroup
+          show={showCommentsModal}
+          onHide={() => {
+            setShowCommentsModal(false);
+            setCommentsGroup(null);
+          }}
+          level={selectedLevel}
+          group={commentsGroup}
+          isLoading={isLoading}
+        />
+      )}
     </Layout>
   );
 };

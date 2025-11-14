@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { GroupsResponse, AlertState, ScheduleEntry, ScheduleResponse } from './types';
+import { GroupsResponse, AlertState, ScheduleEntry, ScheduleResponse, Comment } from './types';
 import { getUser, getUserDisplayName, getUserIdForPresence } from './user-state';
 
 // Hook for fetching available groups for a level
@@ -65,6 +65,8 @@ interface SharedScheduleState {
   syncFromServer: () => Promise<void>;
   updateEntries: (entries: ScheduleEntry[]) => void;
   presenceNames: string[];
+  comments: Comment[];
+  addComment: (message: string) => void;
 }
 
 // Removed - using getUserDisplayName from user-state.ts instead
@@ -110,10 +112,12 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [isSynced, setIsSynced] = useState(false);
   const [presenceNames, setPresenceNames] = useState<string[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
 
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const stateMapRef = useRef<Y.Map<any> | null>(null);
+  const commentsArrayRef = useRef<Y.Array<Comment> | null>(null);
   const loadingFromServerRef = useRef(false);
 
   const docName = `schedule-level-${level}-group-${group}`;
@@ -165,9 +169,11 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
     const awareness = provider.awareness;
 
     const stateMap = doc.getMap<any>('state');
+    const commentsArray = doc.getArray<Comment>('comments');
     docRef.current = doc;
     providerRef.current = provider;
     stateMapRef.current = stateMap;
+    commentsArrayRef.current = commentsArray;
     
     // Use user_id-based identity for Y.js presence to avoid conflicts
     // Get fresh user data each time (not from ref) to handle tab changes
@@ -219,6 +225,15 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
       setPresenceNames(uniqueNames);
     };
 
+    const handleCommentsChange = () => {
+      const commentsData = commentsArray.toArray();
+      // Filter comments for this level and group, sort by createdAt descending (newest first)
+      const filteredComments = commentsData
+        .filter((c) => c.level === level && c.group === group)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      setComments(filteredComments);
+    };
+
     const handleStateChange = () => {
       const currentEntries = stateMap.get('entries');
       setEntries(Array.isArray(currentEntries) ? normalizeEntries(currentEntries, group) : []);
@@ -239,12 +254,14 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
     };
 
     stateMap.observe(handleStateChange);
+    commentsArray.observe(handleCommentsChange);
     provider.on('status', handleStatus);
     provider.on('sync', handleSync);
     awareness.on('change', updatePresenceNames);
 
     // Immediately hydrate entries if something is already stored locally
     handleStateChange();
+    handleCommentsChange();
     updatePresenceNames();
 
     provider.connect();
@@ -256,6 +273,7 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
 
     return () => {
       stateMap.unobserve(handleStateChange);
+      commentsArray.unobserve(handleCommentsChange);
       provider.off('status', handleStatus as any);
       provider.off('sync', handleSync as any);
       awareness.off('change', updatePresenceNames);
@@ -266,10 +284,44 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
       docRef.current = null;
       providerRef.current = null;
       stateMapRef.current = null;
+      commentsArrayRef.current = null;
       setIsSynced(false);
       setPresenceNames([]);
+      setComments([]);
     };
-  }, [docName, group, syncFromServer]);
+  }, [docName, group, level, syncFromServer]);
+
+  const addComment = useCallback(
+    (message: string) => {
+      const commentsArray = commentsArrayRef.current;
+      if (!commentsArray || !message.trim() || !commentsArray.doc) return;
+
+      const currentUser = getUser();
+      const currentUserName = currentUser ? getUserDisplayName(currentUser) : 'Anonymous';
+      const currentUserRole = currentUser?.role || 'User';
+      
+      // Format role for display (e.g., "scheduling_committee" -> "Scheduling Committee")
+      const formattedRole = currentUserRole
+        .split('_')
+        .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      const newComment: Comment = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        level,
+        group,
+        message: message.trim(),
+        authorName: currentUserName,
+        authorRole: formattedRole,
+        createdAt: Date.now(),
+      };
+
+      commentsArray.doc.transact(() => {
+        commentsArray.push([newComment]);
+      });
+    },
+    [level, group]
+  );
 
   return {
     entries,
@@ -277,5 +329,7 @@ export const useSharedSchedule = (level: number, group: number): SharedScheduleS
     syncFromServer,
     updateEntries,
     presenceNames,
+    comments,
+    addComment,
   };
 };

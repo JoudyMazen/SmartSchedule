@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Spinner } from 'react-bootstrap';
+import { Card, Table, Spinner, Button, Badge } from 'react-bootstrap';
 import { ScheduleEntry, TimeSlot, Day } from '../lib/types';
 import { useSharedSchedule } from '../lib/hooks';
 import PresenceBar from './PresenceBar';
+import CommentsModal from './CommentsModal';
 
 interface Props {
   level: number;
@@ -14,7 +15,8 @@ interface Props {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { entries: scheduleData, syncFromServer, presenceNames } = useSharedSchedule(level, group);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const { entries: scheduleData, syncFromServer, presenceNames, comments, addComment } = useSharedSchedule(level, group);
 
   const filterTimeSlots = (slots: TimeSlot[]): TimeSlot[] => {
     return slots.filter(slot => {
@@ -121,10 +123,31 @@ interface Props {
           border: 'none'
         }}
       >
-        <h5 className="mb-0 fw-semibold">
-          <i className="bi bi-calendar-week me-2"></i>
-          Level {level} - Group {group}
-        </h5>
+        <div className="d-flex justify-content-between align-items-center">
+          <h5 className="mb-0 fw-semibold">
+            <i className="bi bi-calendar-week me-2"></i>
+            Level {level} - Group {group}
+          </h5>
+          <Button
+            variant="light"
+            size="sm"
+            onClick={() => setShowCommentsModal(true)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              color: 'white',
+            }}
+            className="d-flex align-items-center"
+          >
+            <i className="bi bi-chat-dots me-2"></i>
+            Comments
+            {comments.length > 0 && (
+              <Badge bg="light" text="dark" className="ms-2">
+                {comments.length}
+              </Badge>
+            )}
+          </Button>
+        </div>
       </Card.Header>
       <Card.Body className="p-0">
         {isLoading ? (
@@ -299,6 +322,15 @@ interface Props {
         )}
       </Card.Body>
     </Card>
+      <CommentsModal
+        show={showCommentsModal}
+        onHide={() => setShowCommentsModal(false)}
+        comments={comments}
+        onAddComment={addComment}
+        level={level}
+        group={group}
+        isLoading={isLoading}
+      />
     </>
   );
 };
