@@ -13,8 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Remove duplicates from electiveIds array
-    const uniqueElectiveIds = [...new Set(electiveIds)].filter(id => id && id.trim() !== '');
-
+    const uniqueElectiveIds = Array.from(new Set(electiveIds)).filter(
+      (id) => id && id.trim() !== ''
+    );
+    
     if (uniqueElectiveIds.length === 0) {
       return res.status(400).json({ 
         success: false, 
