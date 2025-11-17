@@ -5,9 +5,9 @@ import { useRouter } from 'next/router';
 interface ActionButtonsProps {
   onManageGroups: () => void;
   onGenerateAI: () => void;
-  onPublishToFacultyStudents?: () => void;  // ✅ NEW
-  onPublishToTeachingLoad?: () => void;     // ✅ NEW
-  onPublishSchedule?: () => void;           // Keep for backward compatibility
+  onPublishToFacultyStudents?: () => void;
+  onPublishToTeachingLoad?: () => void;
+  onPublishSchedule?: () => void; // Keep for backward compatibility
   onIrregularStudents: () => void;
   onRefresh: () => void;
   isLoading: boolean;
@@ -35,14 +35,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   const secondaryButtonStyle = {
     background: '#b0c4d4',
-    color: '#1e3a5f',
-    padding: '8px 20px',
-    fontSize: '0.9rem',
-    fontWeight: '600'
-  };
-
-  const accentButtonStyle = {
-    background: '#87CEEB',
     color: '#1e3a5f',
     padding: '8px 20px',
     fontSize: '0.9rem',
@@ -89,29 +81,31 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
             Generate AI Schedule
           </Button>
 
-          {/* ✅ NEW: Publish to Teaching Load Committee - Sky Blue */}
+          {/* ✅ NEW: Publish to Teaching Load Committee - Publishes ALL LEVELS */}
           {(onPublishToTeachingLoad || onPublishSchedule) && (
             <Button
               className="border-0 shadow-sm"
               style={buttonStyle}
               onClick={onPublishToTeachingLoad || onPublishSchedule}
               disabled={isLoading}
+              title="Publishes ALL levels to Teaching Load Committee"
             >
               <i className="bi bi-send me-2"></i>
-              Send to Teaching Load
+              Send ALL to Teaching Load
             </Button>
           )}
 
-          {/* ✅ NEW: Publish to Faculty & Students - Dark Blue */}
+          {/* ✅ NEW: Publish to Faculty & Students - Publishes ALL LEVELS */}
           {(onPublishToFacultyStudents || onPublishSchedule) && (
             <Button
               className="border-0 shadow-sm"
               style={buttonStyle}
               onClick={onPublishToFacultyStudents || onPublishSchedule}
               disabled={isLoading}
+              title="Publishes ALL levels to Faculty & Students"
             >
               <i className="bi bi-send me-2"></i>
-              Publish to Faculty & Students
+              Publish ALL to Faculty & Students
             </Button>
           )}
 
@@ -125,7 +119,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
             <i className="bi bi-person-exclamation me-2"></i>
             Irregular Students
           </Button>
-
+         
           {/* Refresh */}
           <Button
             className="border-0 shadow-sm"

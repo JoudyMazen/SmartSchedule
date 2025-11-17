@@ -1,5 +1,5 @@
 // pages/api/scheduleCommittee/publish-schedule.ts
-// ✅ ENHANCED VERSION - Adds dual publishing + version control to your working file
+// ✅ ENHANCED VERSION - Publishes ALL LEVELS together with cross-level version control
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import pool from '../../../lib/db';
@@ -44,77 +44,110 @@ async function getScheduleSnapshot(client: any, schedule_id: number) {
   };
 }
 
-// Helper function to create version snapshot
-async function createVersionSnapshot(
-  client: any, 
-  schedule_id: number, 
-  level: number, 
-  group: number,
+// ✅ NEW: Create a cross-level version that includes ALL schedules
+async function createCrossLevelVersion(
+  client: any,
   action_type: string,
   created_by?: number
 ) {
   try {
-    // Get current schedule snapshot
-    const currentSnapshot = await getScheduleSnapshot(client, schedule_id);
-    if (!currentSnapshot) {
-      return { success: false, error: 'Schedule not found' };
+    // Get ALL schedules across all levels
+    const allSchedulesResult = await client.query(
+      `SELECT schedule_id, level_num, group_num, status 
+       FROM schedule 
+       WHERE LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
+       ORDER BY level_num, group_num`
+    );
+
+    if (allSchedulesResult.rows.length === 0) {
+      return { success: false, error: 'No schedules found' };
     }
 
-    // Get the last version number
+    // Build a comprehensive snapshot of ALL schedules
+    const allSchedulesSnapshot: any = {
+      levels: {}
+    };
+
+    for (const schedule of allSchedulesResult.rows) {
+      const snapshot = await getScheduleSnapshot(client, schedule.schedule_id);
+      if (snapshot) {
+        const levelKey = `level_${schedule.level_num}`;
+        if (!allSchedulesSnapshot.levels[levelKey]) {
+          allSchedulesSnapshot.levels[levelKey] = {
+            level_num: schedule.level_num,
+            groups: {}
+          };
+        }
+        
+        const groupKey = `group_${schedule.group_num}`;
+        allSchedulesSnapshot.levels[levelKey].groups[groupKey] = snapshot;
+      }
+    }
+
+    // Get the last global version number
     const lastVersionResult = await client.query(
-      `SELECT version_number 
+      `SELECT MAX(version_number) as max_version 
        FROM schedule_version 
-       WHERE schedule_id = $1 
-       ORDER BY version_number DESC 
-       LIMIT 1`,
-      [schedule_id]
+       WHERE schedule_id IN (
+         SELECT schedule_id FROM schedule 
+         WHERE LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
+       )`
     );
 
     let versionNumber = 1;
-    if (lastVersionResult.rows.length > 0) {
-      versionNumber = lastVersionResult.rows[0].version_number + 1;
+    if (lastVersionResult.rows[0].max_version) {
+      versionNumber = lastVersionResult.rows[0].max_version + 1;
     }
 
-    // Generate change summary based on action type
+    // Generate change summary
+    const levelCount = Object.keys(allSchedulesSnapshot.levels).length;
+    const totalGroups = allSchedulesResult.rows.length;
+    
     let changeSummary: string;
     if (action_type === 'publish_to_teaching_load') {
-      changeSummary = `Published to Teaching Load Committee for review (Version ${versionNumber})`;
+      changeSummary = `Published ALL schedules to Teaching Load Committee (${levelCount} levels, ${totalGroups} groups) - Version ${versionNumber}`;
     } else if (action_type === 'publish_to_faculty_students') {
-      changeSummary = `Published to Faculty and Students (Version ${versionNumber})`;
+      changeSummary = `Published ALL schedules to Faculty and Students (${levelCount} levels, ${totalGroups} groups) - Version ${versionNumber}`;
     } else {
-      changeSummary = `Published schedule for Level ${level}, Group ${group} (Version ${versionNumber})`;
+      changeSummary = `Published all schedules (${levelCount} levels, ${totalGroups} groups) - Version ${versionNumber}`;
     }
 
-    // Store the version (full snapshot)
-    await client.query(
-      `INSERT INTO schedule_version 
-       (schedule_id, version_number, changes, change_summary, created_by, action_type, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [
-        schedule_id,
-        versionNumber,
-        JSON.stringify(currentSnapshot), // Store full snapshot
-        changeSummary,
-        created_by || null,
-        action_type
-      ]
-    );
+    // Create version record for EACH schedule with the SAME version number
+    for (const schedule of allSchedulesResult.rows) {
+      await client.query(
+        `INSERT INTO schedule_version 
+         (schedule_id, version_number, changes, change_summary, created_by, action_type, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          schedule.schedule_id,
+          versionNumber,
+          JSON.stringify(allSchedulesSnapshot), // Store FULL cross-level snapshot
+          changeSummary,
+          created_by || null,
+          action_type
+        ]
+      );
+    }
 
-    return { success: true, version_number: versionNumber };
+    return { 
+      success: true, 
+      version_number: versionNumber,
+      levels_count: levelCount,
+      groups_count: totalGroups
+    };
   } catch (error) {
-    console.error('Error creating version snapshot:', error);
-    return { success: false, error: 'Failed to create version snapshot' };
+    console.error('Error creating cross-level version:', error);
+    return { success: false, error: 'Failed to create cross-level version' };
   }
 }
 
-// Helper function to create notifications for users when schedule is published
+// Helper function to create notifications
 async function createNotificationsForPublishedSchedule(
   client: any,
-  level: number,
-  groupNum: number | null,
   targetAudience: string,
   versionNumber: number,
-  groupsText?: string
+  levelsCount: number,
+  groupsCount: number
 ) {
   try {
     // Ensure notifications table exists
@@ -131,17 +164,15 @@ async function createNotificationsForPublishedSchedule(
       )
     `);
 
-    // Use provided groupsText or generate from groupNum
-    const groupText = groupsText || (groupNum ? `, Group ${groupNum}` : '');
-    const title = `Schedule Published - Level ${level}${groupText}`;
-    const message = `A new schedule for Level ${level}${groupText} has been published (Version ${versionNumber}). Please review and provide feedback if needed.`;
+    const title = `All Schedules Published - ${levelsCount} Levels, ${groupsCount} Groups`;
+    const message = `All schedules have been published (Version ${versionNumber}). This includes ${levelsCount} levels with ${groupsCount} total groups. Please review and provide feedback if needed.`;
 
     // Define role-specific links
     const roleLinks: { [key: string]: string } = {
-      'student': `/studentHomePage?level=${level}`,
-      'faculty': `/facultyHomePage?level=${level}`,
-      'teaching_load_committee': `/teachingLoadCommittee/teachingLoadCommitteeHomePage?level=${level}`,
-      'scheduling_committee': `/scheduleCommittee/scheduleCommitteeHomePage?level=${level}`
+      'student': `/studentHomePage`,
+      'faculty': `/facultyHomePage`,
+      'teaching_load_committee': `/teachingLoadCommittee/teachingLoadCommitteeHomePage`,
+      'scheduling_committee': `/scheduleCommittee/scheduleCommitteeHomePage`
     };
 
     let targetRoles: string[] = [];
@@ -153,18 +184,16 @@ async function createNotificationsForPublishedSchedule(
     }
 
     // Create notifications for all users with target roles
-    // Check for existing notifications to prevent duplicates
     for (const role of targetRoles) {
       const usersResult = await client.query(
         `SELECT user_id FROM "user" WHERE role = $1`,
         [role]
       );
 
-      const link = roleLinks[role] || `/scheduleCommittee/scheduleCommitteeHomePage?level=${level}`;
+      const link = roleLinks[role] || `/scheduleCommittee/scheduleCommitteeHomePage`;
 
       for (const user of usersResult.rows) {
-        // Check if a similar notification already exists for this user (within last 5 minutes)
-        // This prevents duplicate notifications if the publish action is triggered multiple times
+        // Check for duplicates
         const existingNotification = await client.query(`
           SELECT notification_id 
           FROM notifications 
@@ -175,7 +204,6 @@ async function createNotificationsForPublishedSchedule(
           LIMIT 1
         `, [user.user_id, 'publish', title]);
 
-        // Only create notification if one doesn't already exist
         if (existingNotification.rows.length === 0) {
           await client.query(
             `INSERT INTO notifications (user_id, type, title, message, link)
@@ -204,15 +232,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { level, group, publish_to, created_by } = req.body;
 
-  if (!level) {
-    return res.status(400).json({
-      success: false,
-      message: 'Level is required'
-    });
-  }
+  // ✅ Note: level and group parameters are now OPTIONAL
+  // If not provided, publish ALL levels together
 
   // ✅ Determine target audience and action type
-  // publish_to can be: 'faculty_students', 'teaching_load', or undefined (defaults to 'faculty_students')
   const targetAudience = publish_to || 'faculty_students';
   const action_type = targetAudience === 'teaching_load' 
     ? 'publish_to_teaching_load' 
@@ -223,69 +246,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     await client.query('BEGIN');
 
-    // ✅ STEP 1: Get schedules to publish
+    // ✅ STEP 1: Determine which schedules to publish
     let scheduleQuery: string;
     let scheduleParams: any[];
+    let isPublishingAll = false;
 
-  // Around line 68-77
-if (group) {
-  // Single group
-  scheduleQuery = `
-    SELECT schedule_id, group_num, status
-    FROM schedule
-    WHERE level_num = $1 AND group_num = $2
-    AND LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
-  `;
-  scheduleParams = [level, group];
-} else {
-  // All groups for the level
-  scheduleQuery = `
-    SELECT schedule_id, group_num, status
-    FROM schedule
-    WHERE level_num = $1
-    AND LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
-  `;
-  scheduleParams = [level];
-}
+    if (level && group) {
+      // Single level, single group
+      scheduleQuery = `
+        SELECT schedule_id, level_num, group_num, status
+        FROM schedule
+        WHERE level_num = $1 AND group_num = $2
+        AND LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
+      `;
+      scheduleParams = [level, group];
+    } else if (level) {
+      // Single level, all groups
+      scheduleQuery = `
+        SELECT schedule_id, level_num, group_num, status
+        FROM schedule
+        WHERE level_num = $1
+        AND LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
+      `;
+      scheduleParams = [level];
+    } else {
+      // ✅ ALL LEVELS, ALL GROUPS
+      isPublishingAll = true;
+      scheduleQuery = `
+        SELECT schedule_id, level_num, group_num, status
+        FROM schedule
+        WHERE LOWER(status) IN ('draft', 'active', 'published', 'under_review', 'archived')
+        ORDER BY level_num, group_num
+      `;
+      scheduleParams = [];
+    }
+
     const schedulesToPublish = await client.query(scheduleQuery, scheduleParams);
 
     if (schedulesToPublish.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: `No schedules found for Level ${level}${group ? `, Group ${group}` : ''}`
+        message: level 
+          ? `No schedules found for Level ${level}${group ? `, Group ${group}` : ''}`
+          : 'No schedules found to publish'
       });
     }
 
-    // ✅ STEP 2: Create version snapshots for each schedule
-    const versionResults = [];
-    for (const schedule of schedulesToPublish.rows) {
-      const versionResult = await createVersionSnapshot(
-        client,
-        schedule.schedule_id,
-        level,
-        schedule.group_num,
-        action_type,
-        created_by
-      );
-      
-      if (versionResult.success) {
-        versionResults.push({
-          schedule_id: schedule.schedule_id,
-          group_num: schedule.group_num,
-          version_number: versionResult.version_number
-        });
-      }
+    // ✅ STEP 2: Create cross-level version
+    const versionResult = await createCrossLevelVersion(
+      client,
+      action_type,
+      created_by
+    );
+
+    if (!versionResult.success) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create version snapshot',
+        error: versionResult.error
+      });
     }
 
-    // ✅ STEP 3: Update schedule status based on target audience
-const newStatus = targetAudience === 'teaching_load' ? 'under_review' : 'published';
-
+    // ✅ STEP 3: Update schedule status
+    const newStatus = targetAudience === 'teaching_load' ? 'under_review' : 'published';
     
     let updateQuery: string;
     let updateParams: any[];
 
-    if (group) {
+    if (level && group) {
       updateQuery = `
         UPDATE schedule
         SET status = $1, updated_at = CURRENT_TIMESTAMP
@@ -293,7 +323,7 @@ const newStatus = targetAudience === 'teaching_load' ? 'under_review' : 'publish
         AND LOWER(status) IN ('draft', 'active', 'published', 'under_review')
       `;
       updateParams = [newStatus, level, group];
-    } else {
+    } else if (level) {
       updateQuery = `
         UPDATE schedule
         SET status = $1, updated_at = CURRENT_TIMESTAMP
@@ -301,52 +331,48 @@ const newStatus = targetAudience === 'teaching_load' ? 'under_review' : 'publish
         AND LOWER(status) IN ('draft', 'active', 'published', 'under_review')
       `;
       updateParams = [newStatus, level];
+    } else {
+      // ✅ Update ALL schedules
+      updateQuery = `
+        UPDATE schedule
+        SET status = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE LOWER(status) IN ('draft', 'active', 'published', 'under_review')
+      `;
+      updateParams = [newStatus];
     }
 
     const updateResult = await client.query(updateQuery, updateParams);
 
-    // ✅ STEP 4: Create notifications for published schedules
-    // Only create notifications when publishing to faculty_students or teaching_load
-    // Create ONE notification per level (not per group) to avoid duplicates
+    // ✅ STEP 4: Create notifications
     if (targetAudience === 'faculty_students' || targetAudience === 'teaching_load') {
-      if (schedulesToPublish.rows.length > 0 && versionResults.length > 0) {
-        // Get the highest version number from all published schedules
-        const versionNumbers = versionResults.map(v => v.version_number || 1).filter(v => v > 0);
-        const maxVersion = versionNumbers.length > 0 ? Math.max(...versionNumbers) : 1;
-        
-        // Get all group numbers that were published
-        const publishedGroups = schedulesToPublish.rows.map(s => s.group_num).sort((a, b) => a - b);
-        const groupsText = publishedGroups.length === 1 
-          ? `, Group ${publishedGroups[0]}` 
-          : ` (${publishedGroups.length} groups)`;
-        
-        // Create ONE notification per level (not per group)
-        await createNotificationsForPublishedSchedule(
-          client,
-          level,
-          null, // Pass null for groupNum to indicate all groups
-          targetAudience,
-          maxVersion,
-          groupsText
-        );
-      }
+      await createNotificationsForPublishedSchedule(
+        client,
+        targetAudience,
+        versionResult.version_number || 1,
+        versionResult.levels_count || 0,
+        versionResult.groups_count || 0
+      );
     }
 
     await client.query('COMMIT');
 
-    // ✅ STEP 5: Return success with version info
+    // ✅ STEP 5: Return success
     const audienceName = targetAudience === 'teaching_load' 
       ? 'Teaching Load Committee' 
       : 'Faculty and Students';
 
     return res.status(200).json({
       success: true,
-      message: `Successfully published ${updateResult.rowCount} schedule(s) for Level ${level} to ${audienceName}`,
+      message: isPublishingAll
+        ? `Successfully published ALL schedules (${versionResult.levels_count} levels, ${versionResult.groups_count} groups) to ${audienceName}`
+        : `Successfully published ${updateResult.rowCount} schedule(s) for Level ${level} to ${audienceName}`,
       publishedCount: updateResult.rowCount,
-      versions_created: versionResults.length,
-      version_details: versionResults,
+      version_number: versionResult.version_number,
+      levels_count: versionResult.levels_count,
+      groups_count: versionResult.groups_count,
       published_to: targetAudience,
-      new_status: newStatus
+      new_status: newStatus,
+      published_all: isPublishingAll
     });
 
   } catch (error) {

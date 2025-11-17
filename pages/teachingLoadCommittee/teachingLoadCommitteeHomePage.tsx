@@ -137,24 +137,24 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   const levels = [3, 4, 5, 6, 7, 8];
 
   // ✅ Fetch available groups from database
- const fetchAvailableGroups = async (level: number) => {
-  try {
-    // ✅ Use the same endpoint as Faculty page
-    const response = await fetch(`/api/data/groups?level=${level}`);
-    const data = await response.json();
-    
-    if (data.success && data.groups && data.groups.length > 0) {
-      // groups is already an array of numbers: [1, 2, 3]
-      const levelGroups: number[] = data.groups || [];
-      setAvailableGroups(levelGroups);
-    } else {
+  const fetchAvailableGroups = async (level: number) => {
+    try {
+      // ✅ Use the same endpoint as Faculty page
+      const response = await fetch(`/api/data/groups?level=${level}`);
+      const data = await response.json();
+      
+      if (data.success && data.groups && data.groups.length > 0) {
+        // groups is already an array of numbers: [1, 2, 3]
+        const levelGroups: number[] = data.groups || [];
+        setAvailableGroups(levelGroups);
+      } else {
+        setAvailableGroups([]);
+      }
+    } catch (error) {
+      console.error('Error fetching available groups:', error);
       setAvailableGroups([]);
     }
-  } catch (error) {
-    console.error('Error fetching available groups:', error);
-    setAvailableGroups([]);
-  }
-};
+  };
 
   useEffect(() => {
     fetchTimeSlots();

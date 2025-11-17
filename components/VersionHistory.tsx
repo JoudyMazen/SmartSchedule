@@ -1,11 +1,12 @@
 // components/VersionHistory.tsx
+// ✅ ENHANCED VERSION - Supports cross-level version viewing
+
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Badge, Spinner, Alert, Modal } from 'react-bootstrap';
 import { format } from 'date-fns';
 
 interface Version {
-  version_id: number;
-  schedule_id: number;
+  version_id?: number;
   version_number: number;
   changes: any;
   change_summary: string;
@@ -15,14 +16,21 @@ interface Version {
   first_name?: string;
   last_name?: string;
   role?: string;
-  level_num: number;
-  group_num: number;
+  level_num?: number;
+  group_num?: number;
+  schedules?: Array<{
+    version_id: number;
+    schedule_id: number;
+    level_num: number;
+    group_num: number;
+  }>;
 }
 
 interface VersionHistoryProps {
   scheduleId?: number;
   level?: number;
   group?: number;
+  showAllLevels?: boolean; // ✅ NEW: Show cross-level versions
   onRestore?: () => void;
 }
 
@@ -30,6 +38,7 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
   scheduleId, 
   level, 
   group,
+  showAllLevels = false,
   onRestore 
 }) => {
   const [versions, setVersions] = useState<Version[]>([]);
@@ -43,7 +52,7 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
 
   useEffect(() => {
     fetchVersions();
-  }, [scheduleId, level, group]);
+  }, [scheduleId, level, group, showAllLevels]);
 
   const fetchVersions = async () => {
     setLoading(true);
@@ -52,12 +61,15 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
     try {
       let url = '/api/scheduleCommittee/version-control?';
       
-      if (scheduleId) {
+      if (showAllLevels) {
+        // ✅ Fetch cross-level versions
+        url += 'all_levels=true';
+      } else if (scheduleId) {
         url += `schedule_id=${scheduleId}`;
       } else if (level && group) {
         url += `level=${level}&group=${group}`;
       } else {
-        setError('Either scheduleId or (level and group) is required');
+        setError('Either scheduleId, (level and group), or showAllLevels is required');
         setLoading(false);
         return;
       }
@@ -90,12 +102,18 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
     setError(null);
 
     try {
+      // ✅ Determine if this is a cross-level restore
+      const isCrossLevelVersion = selectedVersion.schedules && selectedVersion.schedules.length > 1;
+      
       const response = await fetch('/api/scheduleCommittee/version-control', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          version_id: selectedVersion.version_id,
-          restored_by: null
+          version_id: selectedVersion.schedules 
+            ? selectedVersion.schedules[0].version_id // Use first schedule's version_id
+            : selectedVersion.version_id,
+          restored_by: null,
+          restore_all_levels: isCrossLevelVersion
         })
       });
 
@@ -123,7 +141,6 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
     setShowDetailsModal(true);
   };
 
-  // ✅ Convert technical action types to user-friendly labels
   const getActionLabel = (actionType: string) => {
     const labels: Record<string, string> = {
       'publish': 'Published',
@@ -137,7 +154,6 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
     return labels[actionType] || actionType.replace(/_/g, ' ');
   };
 
-  // ✅ User-friendly badge with website colors
   const getActionBadge = (actionType: string, isLatest: boolean) => {
     if (isLatest) {
       return (
@@ -153,7 +169,6 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
       );
     }
 
-    // All badges use website colors
     const styles: Record<string, any> = {
       'publish_to_teaching_load': { background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' },
       'publish_to_faculty_students': { background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', color: 'white' },
@@ -181,7 +196,6 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
     }
   };
 
-  // ✅ User-friendly summary of changes
   const getChangesSummary = (changes: any) => {
     if (!changes) return 'No details available';
     
@@ -195,6 +209,22 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
       if (parsed.sessions && Array.isArray(parsed.sessions)) {
         const count = parsed.sessions.length;
         return `${count} course${count !== 1 ? 's' : ''} scheduled`;
+      }
+
+      // ✅ Handle cross-level changes
+      if (parsed.levels) {
+        const levelCount = Object.keys(parsed.levels).length;
+        let totalSessions = 0;
+        
+        Object.values(parsed.levels).forEach((levelData: any) => {
+          Object.values(levelData.groups || {}).forEach((groupData: any) => {
+            if (groupData.sessions) {
+              totalSessions += groupData.sessions.length;
+            }
+          });
+        });
+        
+        return `${levelCount} level${levelCount !== 1 ? 's' : ''}, ${totalSessions} total sessions`;
       }
 
       return 'Schedule updated';
@@ -231,9 +261,11 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
           <div>
             <i className="bi bi-clock-history me-2"></i>
             <strong>Version History</strong>
-            {level && group && (
+            {showAllLevels ? (
+              <span className="ms-2">- All Levels</span>
+            ) : level && group ? (
               <span className="ms-2">- Level {level}, Group {group}</span>
-            )}
+            ) : null}
           </div>
           <Button 
             style={{ background: '#b0c4d4', color: '#1e3a5f', border: 'none' }}
@@ -261,6 +293,7 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
                   <th style={{ width: '120px', color: '#1e3a5f' }}>Version</th>
                   <th style={{ color: '#1e3a5f' }}>What Happened</th>
                   <th style={{ color: '#1e3a5f' }}>Details</th>
+                  {showAllLevels && <th style={{ color: '#1e3a5f' }}>Affected Schedules</th>}
                   <th style={{ color: '#1e3a5f' }}>By</th>
                   <th style={{ color: '#1e3a5f' }}>When</th>
                   <th style={{ width: '180px', color: '#1e3a5f' }}>Actions</th>
@@ -268,7 +301,7 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
               </thead>
               <tbody>
                 {versions.map((version, index) => (
-                  <tr key={version.version_id} style={{ verticalAlign: 'middle' }}>
+                  <tr key={version.version_id || version.version_number} style={{ verticalAlign: 'middle' }}>
                     <td>
                       <div className="d-flex align-items-center">
                         <span 
@@ -298,6 +331,24 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
                         {getChangesSummary(version.changes)}
                       </small>
                     </td>
+                    {showAllLevels && (
+                      <td>
+                        {version.schedules && version.schedules.length > 0 ? (
+                          <div>
+                            <Badge bg="secondary" className="me-1">
+                              {version.schedules.length} schedules
+                            </Badge>
+                            <div className="mt-1">
+                              <small className="text-muted">
+                                Levels: {Array.from(new Set(version.schedules.map(s => s.level_num))).sort().join(', ')}
+                              </small>
+                            </div>
+                          </div>
+                        ) : (
+                          <small className="text-muted">Single schedule</small>
+                        )}
+                      </td>
+                    )}
                     <td>
                       {version.first_name && version.last_name ? (
                         <div>
@@ -369,14 +420,30 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
               <p className="mb-3">
                 Are you sure you want to restore to <strong>Version {selectedVersion.version_number}</strong>?
               </p>
+              {selectedVersion.schedules && selectedVersion.schedules.length > 1 && (
+                <Alert variant="warning" className="mb-3">
+                  <i className="bi bi-info-circle me-2"></i>
+                  <strong>This will restore {selectedVersion.schedules.length} schedules across multiple levels!</strong>
+                </Alert>
+              )}
               <div className="p-3 rounded" style={{ background: '#f8f9fa', border: '2px solid #87CEEB' }}>
                 <div className="mb-2">
                   <strong style={{ color: '#1e3a5f' }}>What will happen:</strong>
                 </div>
                 <ul className="mb-0" style={{ color: '#6c757d' }}>
-                  <li>The schedule will return to how it was in Version {selectedVersion.version_number}</li>
-                  <li>Current schedule will be saved as a new version</li>
-                  <li>You can undo this restore later if needed</li>
+                  {selectedVersion.schedules && selectedVersion.schedules.length > 1 ? (
+                    <>
+                      <li>All {selectedVersion.schedules.length} schedules will return to Version {selectedVersion.version_number}</li>
+                      <li>Current schedules will be saved as new versions</li>
+                      <li>You can undo this restore later if needed</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>The schedule will return to how it was in Version {selectedVersion.version_number}</li>
+                      <li>Current schedule will be saved as a new version</li>
+                      <li>You can undo this restore later if needed</li>
+                    </>
+                  )}
                 </ul>
               </div>
               <Alert variant="info" className="mt-3 mb-0">
@@ -458,10 +525,24 @@ const VersionHistory: React.FC<VersionHistoryProps> = ({
                 </div>
               )}
 
-              <div className="mb-3">
-                <strong style={{ color: '#1e3a5f' }}>Schedule:</strong>
-                <p className="mb-0">Level {selectedDetails.level_num}, Group {selectedDetails.group_num}</p>
-              </div>
+              {selectedDetails.schedules && selectedDetails.schedules.length > 0 ? (
+                <div className="mb-3">
+                  <strong style={{ color: '#1e3a5f' }}>Affected Schedules:</strong>
+                  <p className="mb-0">{selectedDetails.schedules.length} schedules across multiple levels</p>
+                  <div className="mt-2">
+                    {selectedDetails.schedules.map((s, idx) => (
+                      <Badge key={idx} bg="secondary" className="me-1 mb-1">
+                        Level {s.level_num}, Group {s.group_num}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : selectedDetails.level_num && selectedDetails.group_num ? (
+                <div className="mb-3">
+                  <strong style={{ color: '#1e3a5f' }}>Schedule:</strong>
+                  <p className="mb-0">Level {selectedDetails.level_num}, Group {selectedDetails.group_num}</p>
+                </div>
+              ) : null}
 
               <div>
                 <strong style={{ color: '#1e3a5f' }}>Details:</strong>

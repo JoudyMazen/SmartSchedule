@@ -1,4 +1,6 @@
 // pages/api/scheduleCommittee/version-control.ts
+// ✅ ENHANCED VERSION - Supports cross-level version retrieval
+
 import { NextApiRequest, NextApiResponse } from 'next';
 import pool from '../../../lib/db';
 import * as jsondiffpatch from 'jsondiffpatch';
@@ -40,15 +42,40 @@ const differ = jsondiffpatch.create({
   },
 });
 
-// GET - Fetch version history for a schedule
+// GET - Fetch version history
 async function handleGetVersions(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { schedule_id, level, group } = req.query;
+    const { schedule_id, level, group, all_levels } = req.query;
 
     let query: string;
     let params: any[];
 
-    if (schedule_id) {
+    if (all_levels === 'true') {
+      // ✅ Get ALL versions across ALL levels (grouped by version_number)
+      query = `
+        SELECT 
+          v.version_id,
+          v.schedule_id,
+          v.version_number,
+          v.changes,
+          v.change_summary,
+          v.created_by,
+          v.created_at,
+          v.action_type,
+          u.first_name,
+          u.last_name,
+          u.role,
+          s.level_num,
+          s.group_num
+        FROM schedule_version v
+        LEFT JOIN "user" u ON v.created_by = u.user_id
+        LEFT JOIN schedule s ON v.schedule_id = s.schedule_id
+        WHERE v.action_type IN ('publish_to_teaching_load', 'publish_to_faculty_students', 'publish')
+        ORDER BY v.version_number DESC, s.level_num, s.group_num
+      `;
+      params = [];
+
+    } else if (schedule_id) {
       // Fetch by schedule_id
       query = `
         SELECT 
@@ -66,54 +93,91 @@ async function handleGetVersions(req: NextApiRequest, res: NextApiResponse) {
           s.level_num,
           s.group_num
         FROM schedule_version v
-        LEFT JOIN users u ON v.created_by = u.user_id
+        LEFT JOIN "user" u ON v.created_by = u.user_id
         LEFT JOIN schedule s ON v.schedule_id = s.schedule_id
         WHERE v.schedule_id = $1
         ORDER BY v.version_number DESC
       `;
       params = [schedule_id];
-    } else if (level && group) {
-  query = `
-    SELECT 
-      v.version_id,
-      v.schedule_id,
-      v.version_number,
-      v.changes,
-      v.change_summary,
-      v.created_by,
-      v.created_at,
-      v.action_type,
-      s.level_num,
-      s.group_num
-    FROM schedule_version v
-    JOIN schedule s ON v.schedule_id = s.schedule_id
-    WHERE s.level_num = $1 AND s.group_num = $2
-    ORDER BY v.version_number DESC
-  `;
-  params = [level, group];
 
+    } else if (level && group) {
+      query = `
+        SELECT 
+          v.version_id,
+          v.schedule_id,
+          v.version_number,
+          v.changes,
+          v.change_summary,
+          v.created_by,
+          v.created_at,
+          v.action_type,
+          u.first_name,
+          u.last_name,
+          u.role,
+          s.level_num,
+          s.group_num
+        FROM schedule_version v
+        LEFT JOIN "user" u ON v.created_by = u.user_id
+        JOIN schedule s ON v.schedule_id = s.schedule_id
+        WHERE s.level_num = $1 AND s.group_num = $2
+        ORDER BY v.version_number DESC
+      `;
+      params = [level, group];
 
     } else {
       return res.status(400).json({
         success: false,
-        error: 'Either schedule_id or (level and group) is required'
+        error: 'Either schedule_id, (level and group), or all_levels=true is required'
       });
     }
-console.log('🔎 Getting version history for', { schedule_id, level, group });
+
+    console.log('🔎 Getting version history for', { schedule_id, level, group, all_levels });
 
     const result = await pool.query(query, params);
 
-// 🔧 Convert any 'changes' text to JSON object safely
-const versions = result.rows.map((v: any) => ({
-  ...v,
-  changes: typeof v.changes === 'string' ? JSON.parse(v.changes) : v.changes
-}));
+    // Convert any 'changes' text to JSON object safely
+    let versions = result.rows.map((v: any) => ({
+      ...v,
+      changes: typeof v.changes === 'string' ? JSON.parse(v.changes) : v.changes
+    }));
 
-res.status(200).json({
-  success: true,
-  versions,
-  total: versions.length
-});
+    // ✅ If fetching all levels, group by version_number and consolidate
+    if (all_levels === 'true') {
+      const versionMap = new Map<number, any>();
+      
+      versions.forEach((v: any) => {
+        if (!versionMap.has(v.version_number)) {
+          versionMap.set(v.version_number, {
+            version_number: v.version_number,
+            change_summary: v.change_summary,
+            created_by: v.created_by,
+            created_at: v.created_at,
+            action_type: v.action_type,
+            first_name: v.first_name,
+            last_name: v.last_name,
+            role: v.role,
+            changes: v.changes,
+            schedules: []
+          });
+        }
+        
+        versionMap.get(v.version_number).schedules.push({
+          version_id: v.version_id,
+          schedule_id: v.schedule_id,
+          level_num: v.level_num,
+          group_num: v.group_num
+        });
+      });
+
+      versions = Array.from(versionMap.values()).sort((a, b) => b.version_number - a.version_number);
+    }
+
+    res.status(200).json({
+      success: true,
+      versions,
+      total: versions.length,
+      is_cross_level: all_levels === 'true'
+    });
 
   } catch (error) {
     console.error('Error fetching version history:', error);
@@ -237,7 +301,7 @@ async function handleRestoreVersion(req: NextApiRequest, res: NextApiResponse) {
   try {
     await client.query('BEGIN');
 
-    const { version_id, restored_by } = req.body;
+    const { version_id, restored_by, restore_all_levels } = req.body;
 
     if (!version_id) {
       await client.query('ROLLBACK');
@@ -249,9 +313,9 @@ async function handleRestoreVersion(req: NextApiRequest, res: NextApiResponse) {
 
     // Get the version to restore
     const versionResult = await client.query(
-      `SELECT schedule_id, version_number 
-       FROM schedule_version 
-       WHERE version_id = $1`,
+      `SELECT v.schedule_id, v.version_number, v.changes, v.action_type
+       FROM schedule_version v
+       WHERE v.version_id = $1`,
       [version_id]
     );
 
@@ -263,91 +327,68 @@ async function handleRestoreVersion(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const { schedule_id, version_number } = versionResult.rows[0];
+    const { schedule_id, version_number, changes, action_type } = versionResult.rows[0];
+    const parsedChanges = typeof changes === 'string' ? JSON.parse(changes) : changes;
 
-    // Reconstruct the snapshot for this version
-    const restoredSnapshot = await reconstructSnapshot(client, schedule_id, version_number);
+    // ✅ Check if this is a cross-level version
+    const isCrossLevelVersion = parsedChanges.levels && 
+      (action_type === 'publish_to_teaching_load' || action_type === 'publish_to_faculty_students');
 
-    if (!restoredSnapshot) {
-      await client.query('ROLLBACK');
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to reconstruct version snapshot'
+    if (isCrossLevelVersion && restore_all_levels) {
+      // ✅ Restore ALL levels from cross-level snapshot
+      const levelsData = parsedChanges.levels;
+      let restoredCount = 0;
+
+      for (const levelKey of Object.keys(levelsData)) {
+        const levelData = levelsData[levelKey];
+        const groupsData = levelData.groups;
+
+        for (const groupKey of Object.keys(groupsData)) {
+          const groupSnapshot = groupsData[groupKey];
+          
+          // Find the schedule_id for this level/group
+          const scheduleResult = await client.query(
+            `SELECT schedule_id FROM schedule WHERE level_num = $1 AND group_num = $2`,
+            [groupSnapshot.level_num, groupSnapshot.group_num]
+          );
+
+          if (scheduleResult.rows.length > 0) {
+            const targetScheduleId = scheduleResult.rows[0].schedule_id;
+            await restoreSingleSchedule(client, targetScheduleId, groupSnapshot, restored_by);
+            restoredCount++;
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+
+      res.status(200).json({
+        success: true,
+        message: `Successfully restored ${restoredCount} schedules from Version ${version_number}`,
+        restored_count: restoredCount
+      });
+
+    } else {
+      // ✅ Restore single schedule
+      const restoredSnapshot = await reconstructSnapshot(client, schedule_id, version_number);
+
+      if (!restoredSnapshot) {
+        await client.query('ROLLBACK');
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to reconstruct version snapshot'
+        });
+      }
+
+      await restoreSingleSchedule(client, schedule_id, restoredSnapshot, restored_by);
+      await client.query('COMMIT');
+
+      res.status(200).json({
+        success: true,
+        message: `Successfully restored to Version ${version_number}`
       });
     }
 
-    // Delete current schedule entries (only SWE courses)
-    // ✅ Delete all current sessions for this schedule (full restore)
-await client.query(
-  `DELETE FROM contain 
-   WHERE schedule_id = $1`,
-  [schedule_id]
-);
-
-
-    // Restore the sessions from the snapshot
-    for (const session of restoredSnapshot.sessions) {
-      // Ensure section exists
-      await client.query(
-        `INSERT INTO section (course_code, section_number, activity_type, hours_per_session, capacity)
-         VALUES ($1, $2, $3, 1, 25)
-         ON CONFLICT (course_code, section_number, activity_type) DO NOTHING`,
-        [session.course_code, session.section_num, session.activity_type]
-      );
-
-      // Insert session
-      await client.query(
-        `INSERT INTO contain (schedule_id, section_num, course_code, time_slot, day, room, instructor)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          schedule_id,
-          session.section_num,
-          session.course_code,
-          session.time_slot,
-          session.day,
-          session.room || null,
-          session.instructor || null
-        ]
-      );
-    }
-
-    // Create a new version record for the restoration
-    const lastVersionResult = await client.query(
-      `SELECT MAX(version_number) as max_version FROM schedule_version WHERE schedule_id = $1`,
-      [schedule_id]
-    );
-
-    const newVersionNumber = (lastVersionResult.rows[0].max_version || 0) + 1;
-
-    await client.query(
-      `INSERT INTO schedule_version 
-       (schedule_id, version_number, changes, change_summary, created_by, action_type, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [
-        schedule_id,
-        newVersionNumber,
-        JSON.stringify({ restored_from_version: version_number }),
-        `Restored from Version ${version_number}`,
-        restored_by || null,
-        'restore'
-      ]
-    );
-
-    // Update schedule status and timestamp
-    await client.query(
-      `UPDATE schedule 
-       SET status = 'draft', updated_at = NOW() 
-       WHERE schedule_id = $1`,
-      [schedule_id]
-    );
-
-    await client.query('COMMIT');
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully restored to Version ${version_number}`,
-      new_version_number: newVersionNumber
-    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error restoring version:', error);
@@ -358,6 +399,49 @@ await client.query(
   } finally {
     client.release();
   }
+}
+
+// ✅ Helper function to restore a single schedule
+async function restoreSingleSchedule(client: any, schedule_id: number, snapshot: any, restored_by?: number) {
+  // Delete current schedule entries
+  await client.query(
+    `DELETE FROM contain WHERE schedule_id = $1`,
+    [schedule_id]
+  );
+
+  // Restore the sessions from the snapshot
+  for (const session of snapshot.sessions) {
+    // Ensure section exists
+    await client.query(
+      `INSERT INTO section (course_code, section_number, activity_type, hours_per_session, capacity)
+       VALUES ($1, $2, $3, 1, 25)
+       ON CONFLICT (course_code, section_number, activity_type) DO NOTHING`,
+      [session.course_code, session.section_num, session.activity_type]
+    );
+
+    // Insert session
+    await client.query(
+      `INSERT INTO contain (schedule_id, section_num, course_code, time_slot, day, room, instructor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        schedule_id,
+        session.section_num,
+        session.course_code,
+        session.time_slot,
+        session.day,
+        session.room || null,
+        session.instructor || null
+      ]
+    );
+  }
+
+  // Update schedule status
+  await client.query(
+    `UPDATE schedule 
+     SET status = 'draft', updated_at = NOW() 
+     WHERE schedule_id = $1`,
+    [schedule_id]
+  );
 }
 
 // Helper function to get current schedule snapshot
@@ -401,7 +485,6 @@ async function getScheduleSnapshot(client: any, schedule_id: number): Promise<Sc
 }
 
 // Helper function to reconstruct a snapshot from version history
-// Helper function to reconstruct a snapshot from version history
 async function reconstructSnapshot(
   client: any,
   schedule_id: number,
@@ -439,17 +522,26 @@ async function reconstructSnapshot(
     sessions: []
   };
 
-  // ✅ FIX: If any version already stores the full snapshot (has sessions array), use it directly
+  // Apply each version's changes
   for (const versionRow of versionsResult.rows) {
     const delta = typeof versionRow.changes === 'string'
       ? JSON.parse(versionRow.changes)
       : versionRow.changes;
 
-    if (delta?.sessions) {
-      // This is a full snapshot (from publish API)
-      snapshot = delta;
+    if (delta?.sessions || delta?.levels) {
+      // This is a full snapshot
+      if (delta.levels) {
+        // Extract this specific schedule from cross-level snapshot
+        const levelKey = `level_${snapshot.level_num}`;
+        const groupKey = `group_${snapshot.group_num}`;
+        if (delta.levels[levelKey]?.groups[groupKey]) {
+          snapshot = delta.levels[levelKey].groups[groupKey];
+        }
+      } else {
+        snapshot = delta;
+      }
     } else if (delta) {
-      // Otherwise apply the delta patch
+      // Apply delta patch
       snapshot = jsondiffpatch.patch(snapshot, delta);
     }
   }
