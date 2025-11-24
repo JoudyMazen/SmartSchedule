@@ -4,7 +4,7 @@ import pool from '../../../lib/db';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
-      const { level, role, feedback_type, rating, schedule_id } = req.query;
+      const { level, role, feedback_type, search, schedule_id } = req.query;
 
       // Build query with filters
       let query = `
@@ -53,10 +53,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         paramIndex++;
       }
 
-      // Filter by rating
-      if (rating) {
-        query += ` AND f.rating = $${paramIndex}`;
-        params.push(parseInt(rating as string));
+      // Filter by search term (comment, user name, schedule id)
+      if (search) {
+        query += ` AND (
+          f.comment ILIKE $${paramIndex}
+          OR u.first_name ILIKE $${paramIndex}
+          OR u.last_name ILIKE $${paramIndex}
+          OR COALESCE(CAST(f.schedule_id AS TEXT), '') ILIKE $${paramIndex}
+        )`;
+        params.push(`%${(search as string).trim()}%`);
         paramIndex++;
       }
 
@@ -78,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           level: level || null,
           role: role || null,
           feedback_type: feedback_type || null,
-          rating: rating || null,
+          search: search || null,
           schedule_id: schedule_id || null
         }
       });

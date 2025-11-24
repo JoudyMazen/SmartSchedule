@@ -34,7 +34,7 @@ interface FeedbackFilters {
   level: string;
   role: string;
   feedback_type: string;
-  rating: string;
+  search: string;
 }
 
 const SchedulingCommitteeHomePage: React.FC = () => {
@@ -50,7 +50,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
     level: '',
     role: '',
     feedback_type: '',
-    rating: ''
+    search: ''
   });
   const [selectedFeedbacks, setSelectedFeedbacks] = useState<number[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -260,7 +260,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
       if (feedbackFilters.level) params.append('level', feedbackFilters.level);
       if (feedbackFilters.role) params.append('role', feedbackFilters.role);
       if (feedbackFilters.feedback_type) params.append('feedback_type', feedbackFilters.feedback_type);
-      if (feedbackFilters.rating) params.append('rating', feedbackFilters.rating);
+      if (feedbackFilters.search.trim()) params.append('search', feedbackFilters.search.trim());
 
       const url = `/api/scheduleCommittee/feedback${
         params.toString() ? `?${params.toString()}` : ''
@@ -285,14 +285,15 @@ const SchedulingCommitteeHomePage: React.FC = () => {
 
   const groupFeedbacksByRole = (feedbacks: Feedback[]) => {
     const grouped: { [key: string]: Feedback[] } = {
+      scheduling_committee: [],
+      teaching_load_committee: [],
       faculty: [],
       student: [],
-      teaching_load_committee: [],
       other: []
     };
 
     feedbacks.forEach((feedback) => {
-      const role = feedback.role || 'other';
+      const role = (feedback.role || 'other').toLowerCase();
       if (grouped[role]) {
         grouped[role].push(feedback);
       } else {
@@ -747,21 +748,16 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                               </select>
                             </Col>
                             <Col md={3}>
-                              <label className="form-label small fw-semibold">Rating</label>
-                              <select
-                                className="form-select form-select-sm"
-                                value={feedbackFilters.rating}
+                              <label className="form-label small fw-semibold">Search</label>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="Name, comment, schedule #"
+                                value={feedbackFilters.search}
                                 onChange={(e) =>
-                                  setFeedbackFilters({ ...feedbackFilters, rating: e.target.value })
+                                  setFeedbackFilters({ ...feedbackFilters, search: e.target.value })
                                 }
-                              >
-                                <option value="">All Ratings</option>
-                                <option value="5">5 Stars</option>
-                                <option value="4">4 Stars</option>
-                                <option value="3">3 Stars</option>
-                                <option value="2">2 Stars</option>
-                                <option value="1">1 Star</option>
-                              </select>
+                              />
                             </Col>
                           </Row>
                           <div className="mt-3">
@@ -772,7 +768,7 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                                   level: '',
                                   role: '',
                                   feedback_type: '',
-                                  rating: ''
+                                  search: ''
                                 })
                               }
                             >
@@ -840,10 +836,25 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                           {(() => {
                             const grouped = groupFeedbacksByRole(feedbacks);
                             const roleLabels: { [key: string]: string } = {
+                              scheduling_committee: 'Scheduling Committee Feedback',
                               faculty: 'Faculty Feedback',
                               student: 'Student Feedback',
                               teaching_load_committee: 'Teaching Load Committee Feedback',
                               other: 'Other Feedback'
+                            };
+                            const roleHighlights: { [key: string]: string } = {
+                              scheduling_committee: '#e8f5e9',
+                              faculty: '#e3f2fd',
+                              student: '#f3e5f5',
+                              teaching_load_committee: '#fff3e0',
+                              other: '#f8f9fa'
+                            };
+                            const roleIcons: { [key: string]: string } = {
+                              scheduling_committee: 'fa-calendar-check',
+                              teaching_load_committee: 'fa-clipboard-check',
+                              faculty: 'fa-chalkboard-teacher',
+                              student: 'fa-user-graduate',
+                              other: 'fa-users'
                             };
 
                             return Object.entries(grouped).map(([role, roleFeedbacks]) => {
@@ -862,26 +873,13 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                                     <div
                                       className="card-header d-flex justify-content-between align-items-center"
                                       style={{
-                                        background:
-                                          role === 'faculty'
-                                            ? '#e3f2fd'
-                                            : role === 'student'
-                                            ? '#f3e5f5'
-                                            : '#fff3e0',
+                                        background: roleHighlights[role] || roleHighlights.other,
                                         border: 'none'
                                       }}
                                     >
                                       <h5 className="mb-0" style={{ color: '#1e3a5f' }}>
-                                        <i
-                                          className={`fas ${
-                                            role === 'faculty'
-                                              ? 'fa-chalkboard-teacher'
-                                              : role === 'student'
-                                              ? 'fa-user-graduate'
-                                              : 'fa-users'
-                                          } me-2`}
-                                        ></i>
-                                        {roleLabels[role]}
+                                        <i className={`fas ${roleIcons[role] || roleIcons.other} me-2`}></i>
+                                        {roleLabels[role] || roleLabels.other}
                                         <span className="badge bg-secondary ms-2">
                                           {roleFeedbacks.length}
                                         </span>
@@ -957,25 +955,6 @@ const SchedulingCommitteeHomePage: React.FC = () => {
                                                 </div>
                                               </div>
                                               <div className="text-end">
-                                                {feedback.rating && (
-                                                  <div className="mb-1">
-                                                    {[...Array(5)].map((_, i) => (
-                                                      <i
-                                                        key={i}
-                                                        className={`fas fa-star${
-                                                          i < feedback.rating! ? '' : '-o'
-                                                        }`}
-                                                        style={{
-                                                          color:
-                                                            i < feedback.rating!
-                                                              ? '#ffc107'
-                                                              : '#dee2e6',
-                                                          fontSize: '0.8rem'
-                                                        }}
-                                                      />
-                                                    ))}
-                                                  </div>
-                                                )}
                                                 <small className="text-muted">
                                                   {feedback.created_at
                                                     ? new Date(feedback.created_at).toLocaleDateString()
