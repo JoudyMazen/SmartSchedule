@@ -107,6 +107,7 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   const [filteredScheduleData, setFilteredScheduleData] = useState<ScheduleEntry[]>([]);
   const [instructorLoads, setInstructorLoads] = useState<InstructorLoad[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [selectedFeedbackIds, setSelectedFeedbackIds] = useState<number[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [days, setDays] = useState<Day[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,6 +126,7 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackType, setFeedbackType] = useState<string>('general');
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(null);
+  const [isDeletingFeedback, setIsDeletingFeedback] = useState(false);
   
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<number>(1);
@@ -247,9 +249,81 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
       const data = await response.json();
       if (data.success) {
         setFeedbacks(data.feedbacks || []);
+        setSelectedFeedbackIds([]);
       }
     } catch (error) {
       console.error('Error fetching feedbacks:', error);
+    }
+  };
+
+  const toggleSelectFeedback = (feedbackId?: number) => {
+    if (typeof feedbackId !== 'number') return;
+    setSelectedFeedbackIds((prev) =>
+      prev.includes(feedbackId) ? prev.filter((id) => id !== feedbackId) : [...prev, feedbackId]
+    );
+  };
+
+  const handleSelectAllFeedbacks = () => {
+    const ids = feedbacks
+      .map((feedback) => feedback.feedback_id)
+      .filter((id): id is number => typeof id === 'number');
+
+    if (ids.length === 0) return;
+
+    if (selectedFeedbackIds.length === ids.length) {
+      setSelectedFeedbackIds([]);
+    } else {
+      setSelectedFeedbackIds(ids);
+    }
+  };
+
+  const handleDeleteSelectedFeedbacks = async () => {
+    if (selectedFeedbackIds.length === 0) return;
+
+    const confirmDelete = window.confirm(
+      `Delete ${selectedFeedbackIds.length} selected feedback(s)? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    setIsDeletingFeedback(true);
+    setAlert(null);
+
+    try {
+      const deleteRequests = selectedFeedbackIds.map(async (feedbackId) => {
+        const response = await fetch(`/api/teachingLoadCommittee/feedback?feedback_id=${feedbackId}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data?.error || 'Failed to delete feedback');
+        }
+      });
+
+      const results = await Promise.allSettled(deleteRequests);
+      const successCount = results.filter((result) => result.status === 'fulfilled').length;
+      const failureCount = results.length - successCount;
+
+      if (successCount > 0) {
+        setAlert({
+          type: failureCount > 0 ? 'warning' : 'success',
+          message:
+            failureCount > 0
+              ? `Deleted ${successCount} feedback(s). ${failureCount} failed, please retry.`
+              : `Deleted ${successCount} feedback(s) successfully.`,
+        });
+      } else {
+        setAlert({ type: 'danger', message: 'Failed to delete selected feedback. Please try again.' });
+      }
+
+      setSelectedFeedbackIds([]);
+      await fetchFeedbacks();
+    } catch (error) {
+      console.error('Error deleting feedbacks:', error);
+      setAlert({ type: 'danger', message: 'Failed to delete selected feedback. Please try again.' });
+    } finally {
+      setIsDeletingFeedback(false);
     }
   };
 
@@ -888,26 +962,71 @@ const TeachingLoadCommitteeHomePage: React.FC = () => {
                   border: 'none'
                 }}
               >
-                <h5 className="mb-0 fw-semibold">
-                  <i className="bi bi-chat-left-text me-2"></i>
-                  Previous Feedback & Comments
-                </h5>
+                <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                  <h5 className="mb-0 fw-semibold d-flex align-items-center">
+                    <i className="bi bi-chat-left-text me-2"></i>
+                    Previous Feedback & Comments
+                  </h5>
+                  <div className="d-flex align-items-center gap-3">
+                    <Form.Check
+                      id="select-all-feedbacks"
+                      type="checkbox"
+                      label="Select all"
+                      className="text-white"
+                      checked={
+                        feedbacks.length > 0 &&
+                        feedbacks.every(
+                          (feedback) =>
+                            typeof feedback.feedback_id !== 'number' ||
+                            selectedFeedbackIds.includes(feedback.feedback_id)
+                        )
+                      }
+                      onChange={handleSelectAllFeedbacks}
+                    />
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={selectedFeedbackIds.length === 0 || isDeletingFeedback}
+                      onClick={handleDeleteSelectedFeedbacks}
+                    >
+                      {isDeletingFeedback ? 'Deleting...' : `Delete (${selectedFeedbackIds.length || 0})`}
+                    </Button>
+                  </div>
+                </div>
               </Card.Header>
               <Card.Body>
-                {feedbacks.map((feedback, idx) => (
-                  <div key={idx} className="border-bottom pb-3 mb-3">
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <Badge bg="primary" className="me-2">{feedback.feedback_type}</Badge>
-                        <small className="text-muted">
-                          {feedback.created_at ? new Date(feedback.created_at).toLocaleString() : 'N/A'}
-                        </small>
+                {feedbacks.map((feedback, idx) => {
+                  const isSelected =
+                    typeof feedback.feedback_id === 'number' &&
+                    selectedFeedbackIds.includes(feedback.feedback_id);
+                  return (
+                    <div key={idx} className="border-bottom pb-3 mb-3">
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div className="d-flex align-items-start w-100">
+                          <Form.Check
+                            type="checkbox"
+                            className="me-3 mt-1"
+                            checked={isSelected}
+                            onChange={() => toggleSelectFeedback(feedback.feedback_id)}
+                          />
+                          <div className="flex-grow-1">
+                            <div>
+                              <Badge bg="primary" className="me-2 text-capitalize">{feedback.feedback_type}</Badge>
+                              <small className="text-muted">
+                                {feedback.created_at ? new Date(feedback.created_at).toLocaleString() : 'N/A'}
+                              </small>
+                            </div>
+                            <p className="mt-2 mb-1">{feedback.comment}</p>
+                            {feedback.user_name && (
+                              <small className="text-muted d-block">Submitted by: {feedback.user_name}</small>
+                            )}
+                          </div>
+                        </div>
+                        <small className="text-muted ms-3">Schedule ID: {feedback.schedule_id}</small>
                       </div>
-                      <small className="text-muted">Schedule ID: {feedback.schedule_id}</small>
                     </div>
-                    <p className="mt-2 mb-0">{feedback.comment}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </Card.Body>
             </Card>
           )}
