@@ -66,11 +66,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Since the unique constraint is on (student_id, course_code) without level,
       // we need to delete existing preferences for these courses to avoid conflicts
       if (uniqueElectiveIds.length > 0) {
-        const coursePlaceholders = uniqueElectiveIds.map((_, idx) => `$${idx + 2}`).join(', ');
-        await client.query(`
-          DELETE FROM elective_preferences 
-          WHERE student_id = $1 AND course_code IN (${coursePlaceholders})
-        `, [studentId, ...uniqueElectiveIds]);
+        await client.query(
+          `DELETE FROM elective_preferences 
+           WHERE student_id = $1 AND level = $2`,
+          [studentId, level]
+        );
       }
 
       // Insert new preferences

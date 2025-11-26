@@ -1119,5 +1119,4 @@ const StudentHomePage: React.FC = () => {
     </Layout>
   );
 };
-
 export default StudentHomePage;
