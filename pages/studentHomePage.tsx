@@ -857,145 +857,76 @@ const StudentHomePage: React.FC = () => {
           )}
 
           {/* Elective Courses Section */}
-          <Card className="shadow-sm mt-4 border-0">
-            <Card.Header
-              style={{
-                background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
-                color: 'white',
-                border: 'none'
-              }}
-            >
-              <div className="d-flex justify-content-between align-items-center">
-                <h5 className="mb-0 fw-semibold">
-                  <i className="bi bi-book me-2"></i>
-                  Elective Courses Survey - Level {selectedLevel}
-                </h5>
-                <Button
-                  size="sm"
-                  variant="light"
-                  onClick={() => setShowElectiveModal(true)}
-                  style={{ color: '#1e3a5f' }}
-                >
-                  <i className="bi bi-plus-circle me-1"></i>
-                  Select Electives
-                </Button>
-              </div>
-            </Card.Header>
-            <Card.Body>
-              {electiveCourses.length > 0 ? (
-                <div>
-                  <div className="mb-3">
-                    <p className="text-muted mb-2">
-                      Choose your preferred elective courses for Level {selectedLevel}. You can select multiple courses.
-                    </p>
-                    <div className="alert alert-info border-0" style={{ background: '#e6f4ff', color: '#1e3a5f' }}>
-                      <i className="bi bi-info-circle me-2"></i>
-                      <strong>Survey Instructions:</strong> Select all elective courses you would like to take. 
-                      Your preferences will help the scheduling committee create the best possible schedule for you.
-                    </div>
-                  </div>
-                  <Row className="g-3">
-                    {electiveCourses.map((course) => (
-                      <Col md={6} lg={4} key={course.course_code}>
-                        <Card 
-                          className={`h-100 border-2 ${
-                            selectedElectives.includes(course.course_code) 
-                              ? 'border-primary' 
-                              : 'border-light'
-                          }`}
-                          style={{
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            background: selectedElectives.includes(course.course_code) 
-                              ? '#e6f4ff' 
-                              : 'white'
-                          }}
-                          onClick={() => handleElectiveSelection(
-                            course.course_code, 
-                            !selectedElectives.includes(course.course_code)
-                          )}
-                        >
-                          <Card.Body className="p-3">
-                            <div className="d-flex justify-content-between align-items-start mb-2">
-                              <h6 className="mb-1 fw-bold" style={{ color: '#1e3a5f' }}>
-                                {course.course_code}
-                              </h6>
-                              <Form.Check
-                                type="checkbox"
-                                checked={selectedElectives.includes(course.course_code)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  handleElectiveSelection(course.course_code, e.target.checked);
-                                }}
-                                style={{ marginTop: '-2px' }}
-                              />
-                            </div>
-                            <p className="text-muted small mb-2">{course.course_name}</p>
-                            <div className="d-flex justify-content-between align-items-center">
-                              <small className="text-muted">
-                                {course.credits} credits
-                              </small>
-                              <small className="text-muted">
-                                {[
-                                  course.lecture ? 'L' : '',
-                                  course.tutorial ? 'T' : '',
-                                  course.lab ? 'Lab' : ''
-                                ].filter(Boolean).join(' + ') || 'N/A'}
-                              </small>
-                            </div>
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    ))}
-                  </Row>
-                  {selectedElectives.length > 0 && (
-                    <div className="mt-4 p-3" style={{ background: '#f8f9fa', borderRadius: '8px' }}>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <h6 className="mb-1" style={{ color: '#1e3a5f' }}>
-                            Selected Electives ({selectedElectives.length})
-                          </h6>
-                          <p className="text-muted small mb-0">
-                            {selectedElectives.map(code => 
-                              electiveCourses.find(c => c.course_code === code)?.course_name
-                            ).join(', ')}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          style={{ 
-                            background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)', 
-                            border: 'none',
-                            color: 'white'
-                          }}
-                          onClick={handleSubmitElectives}
-                          disabled={isSubmittingElectives}
-                        >
-                          {isSubmittingElectives ? (
-                            <>
-                              <Spinner size="sm" className="me-2" />
-                              Submitting...
-                            </>
-                          ) : (
-                            <>
-                              <i className="bi bi-check-circle me-1"></i>
-                              Submit Preferences
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <i className="bi bi-book text-muted" style={{ fontSize: '3rem' }}></i>
-                  <p className="text-muted mt-3 mb-0">No elective courses available for Level {selectedLevel}</p>
-                  <small className="text-muted">Please select a different level or contact your academic advisor.</small>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
+<Card className="shadow-sm mt-4 border-0">
+  <Card.Header
+    style={{
+      background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+      color: 'white',
+      border: 'none'
+    }}
+  >
+    <div className="d-flex justify-content-between align-items-center">
+      <h5 className="mb-0 fw-semibold">
+        <i className="bi bi-book me-2"></i>
+        Elective Courses Survey - Level {selectedLevel}
+      </h5>
+      <Button
+        size="sm"
+        variant="light"
+        onClick={() => setShowElectiveModal(true)}
+        style={{ color: '#1e3a5f' }}
+      >
+        <i className="bi bi-plus-circle me-1"></i>
+        Select Electives
+      </Button>
+    </div>
+  </Card.Header>
+
+  <Card.Body>
+    <div className="mb-3">
+      <p className="text-muted mb-2">
+        Choose your preferred elective courses for Level {selectedLevel}. 
+        You can select multiple courses by clicking the "Select Electives" button.
+      </p>
+      <div
+        className="alert alert-info border-0"
+        style={{ background: '#e6f4ff', color: '#1e3a5f' }}
+      >
+        <i className="bi bi-info-circle me-2"></i>
+        <strong>Survey Instructions:</strong> Use the "Select Electives" button to open the form,
+        choose all elective courses you would like to take, then submit your preferences.
+      </div>
+    </div>
+
+    {selectedElectives.length > 0 ? (
+      <div
+        className="mt-3 p-3"
+        style={{ background: '#f8f9fa', borderRadius: '8px' }}
+      >
+        <h6 className="mb-2" style={{ color: '#1e3a5f' }}>
+          Your current elective preferences ({selectedElectives.length})
+        </h6>
+        <ul className="mb-0">
+          {selectedElectives.map((code) => {
+            const course = electiveCourses.find((c) => c.course_code === code);
+            return (
+              <li key={code} className="small">
+                <strong>{code}</strong> - {course?.course_name || 'Elective course'}
+              </li>
+            );
+          })}
+        </ul>
+        <small className="text-muted">
+          To update your preferences, click the "Select Electives" button again.
+        </small>
+      </div>
+    ) : (
+      <div className="text-muted small">
+        You have not selected any electives yet. Click "Select Electives" to choose your preferred courses.
+      </div>
+    )}
+  </Card.Body>
+</Card>
 
           {/* Previous Feedbacks */}
           {feedbacks.length > 0 && (
