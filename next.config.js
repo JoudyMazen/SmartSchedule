@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+console.log('🚀 Deployment Version: v2');
+
 const nextConfig = {
  
   env: {
